@@ -64,7 +64,8 @@ export async function searchCards(
 ): Promise<ScryfallSearchResponse> {
   const { order = 'edhrec', page = 1 } = options;
   const colorFilter = colorIdentity.length > 0 ? `id<=${colorIdentity.join('')}` : '';
-  const fullQuery = `${colorFilter} ${query} f:commander`;
+  // Wrap query in parentheses so color filter applies to entire query (including OR clauses)
+  const fullQuery = `${colorFilter} (${query}) f:commander`;
   const encodedQuery = encodeURIComponent(fullQuery.trim());
 
   return scryfallFetch<ScryfallSearchResponse>(

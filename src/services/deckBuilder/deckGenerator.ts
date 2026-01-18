@@ -708,7 +708,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     }
 
     // 2. Instants - use EDHREC type target count, then categorize by function
-    const instantTarget = typeTargets.instant || 8;
+    const instantTarget = typeTargets.instant || 0;
     console.log(`[DeckGen] Instants: need ${instantTarget}, EDHREC has ${cardlists.instants.length} available`);
     onProgress?.(`Selecting ${instantTarget} instants...`);
     const instants = await pickFromEDHRECWithCurve(
@@ -725,7 +725,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     categorizeInstants(instants, categories);
 
     // 3. Sorceries - use EDHREC type target count, then categorize by function
-    const sorceryTarget = typeTargets.sorcery || 8;
+    const sorceryTarget = typeTargets.sorcery || 0;
     console.log(`[DeckGen] Sorceries: need ${sorceryTarget}, EDHREC has ${cardlists.sorceries.length} available`);
     onProgress?.(`Selecting ${sorceryTarget} sorceries...`);
     const sorceries = await pickFromEDHRECWithCurve(
@@ -742,7 +742,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     categorizeSorceries(sorceries, categories);
 
     // 4. Artifacts - use EDHREC type target count, then categorize by function
-    const artifactTarget = typeTargets.artifact || 7;
+    const artifactTarget = typeTargets.artifact || 0;
     console.log(`[DeckGen] Artifacts: need ${artifactTarget}, EDHREC has ${cardlists.artifacts.length} available`);
     onProgress?.(`Selecting ${artifactTarget} artifacts...`);
     const artifacts = await pickFromEDHRECWithCurve(
@@ -759,7 +759,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     categorizeArtifacts(artifacts, categories);
 
     // 5. Enchantments - use EDHREC type target count, then categorize by function
-    const enchantmentTarget = typeTargets.enchantment || 7;
+    const enchantmentTarget = typeTargets.enchantment || 0;
     console.log(`[DeckGen] Enchantments: need ${enchantmentTarget}, EDHREC has ${cardlists.enchantments.length} available`);
     onProgress?.(`Selecting ${enchantmentTarget} enchantments...`);
     const enchantments = await pickFromEDHRECWithCurve(
@@ -776,7 +776,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     categorizeEnchantments(enchantments, categories);
 
     // 6. Planeswalkers - use EDHREC type target count
-    const planeswalkerTarget = typeTargets.planeswalker || 1;
+    const planeswalkerTarget = typeTargets.planeswalker || 0;
     console.log(`[DeckGen] Planeswalkers: need ${planeswalkerTarget}, EDHREC has ${cardlists.planeswalkers.length} available`);
     if (cardlists.planeswalkers.length > 0 && planeswalkerTarget > 0) {
       onProgress?.(`Selecting ${planeswalkerTarget} planeswalkers...`);
@@ -840,91 +840,8 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       lands: categories.lands.length,
     });
 
-    // Fill any missing functional categories from Scryfall if needed
-    // Note: With type-based selection, these should be less needed
-    const minRamp = 6; // Ensure minimum ramp
-    const minCardDraw = 6; // Ensure minimum card draw
-    const minRemoval = 5; // Ensure minimum removal
-
-    if (categories.ramp.length < minRamp) {
-      const needed = minRamp - categories.ramp.length;
-      console.log(`[DeckGen] FALLBACK: Need ${needed} more ramp from Scryfall (have ${categories.ramp.length}, min ${minRamp})`);
-      onProgress?.('Finding more ramp...');
-      const moreRamp = await fillWithScryfall(
-        '(t:artifact o:"add" o:mana) OR (o:"search your library" o:land t:sorcery)',
-        colorIdentity,
-        needed,
-        usedNames,
-        singleton,
-        bannedCards
-      );
-      console.log(`[DeckGen] FALLBACK: Got ${moreRamp.length} ramp from Scryfall:`, moreRamp.map(c => c.name));
-      categories.ramp.push(...moreRamp);
-    }
-
-    if (categories.cardDraw.length < minCardDraw) {
-      const needed = minCardDraw - categories.cardDraw.length;
-      console.log(`[DeckGen] FALLBACK: Need ${needed} more card draw from Scryfall (have ${categories.cardDraw.length}, min ${minCardDraw})`);
-      onProgress?.('Finding more card draw...');
-      const moreDraw = await fillWithScryfall(
-        'o:"draw a card" (t:instant OR t:sorcery OR t:enchantment)',
-        colorIdentity,
-        needed,
-        usedNames,
-        singleton,
-        bannedCards
-      );
-      console.log(`[DeckGen] FALLBACK: Got ${moreDraw.length} card draw from Scryfall:`, moreDraw.map(c => c.name));
-      categories.cardDraw.push(...moreDraw);
-    }
-
-    if (categories.singleRemoval.length < minRemoval) {
-      const needed = minRemoval - categories.singleRemoval.length;
-      console.log(`[DeckGen] FALLBACK: Need ${needed} more removal from Scryfall (have ${categories.singleRemoval.length}, min ${minRemoval})`);
-      onProgress?.('Finding more removal...');
-      const moreRemoval = await fillWithScryfall(
-        '(o:"destroy target" OR o:"exile target") (t:instant OR t:sorcery)',
-        colorIdentity,
-        needed,
-        usedNames,
-        singleton,
-        bannedCards
-      );
-      console.log(`[DeckGen] FALLBACK: Got ${moreRemoval.length} removal from Scryfall:`, moreRemoval.map(c => c.name));
-      categories.singleRemoval.push(...moreRemoval);
-    }
-
-    if (categories.boardWipes.length < targets.boardWipes) {
-      const needed = targets.boardWipes - categories.boardWipes.length;
-      console.log(`[DeckGen] FALLBACK: Need ${needed} more board wipes from Scryfall`);
-      onProgress?.('Finding board wipes...');
-      const moreWipes = await fillWithScryfall(
-        '(o:"destroy all" OR o:"exile all") (t:instant OR t:sorcery)',
-        colorIdentity,
-        needed,
-        usedNames,
-        singleton,
-        bannedCards
-      );
-      console.log(`[DeckGen] FALLBACK: Got ${moreWipes.length} board wipes from Scryfall:`, moreWipes.map(c => c.name));
-      categories.boardWipes.push(...moreWipes);
-    }
-
-    if (categories.synergy.length < targets.synergy) {
-      const needed = targets.synergy - categories.synergy.length;
-      console.log(`[DeckGen] FALLBACK: Need ${needed} more synergy from Scryfall`);
-      onProgress?.('Finding synergy cards...');
-      const moreSynergy = await fillWithScryfall(
-        '(t:artifact OR t:enchantment) -t:creature',
-        colorIdentity,
-        needed,
-        usedNames,
-        singleton,
-        bannedCards
-      );
-      console.log(`[DeckGen] FALLBACK: Got ${moreSynergy.length} synergy from Scryfall:`, moreSynergy.map(c => c.name));
-      categories.synergy.push(...moreSynergy);
-    }
+    // No minimum requirements - let the deck be composed based on EDHREC data
+    // for the specific commander/archetype (e.g., enchantress, artifact-heavy, etc.)
 
   } else {
     // Fallback to Scryfall-based generation

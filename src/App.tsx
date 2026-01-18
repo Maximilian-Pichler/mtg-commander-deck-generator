@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { HomePage } from '@/pages/HomePage';
 import { BuilderPage } from '@/pages/BuilderPage';
-import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
 import type { ScryfallCard } from '@/types';
-import { RotateCcw } from 'lucide-react';
 
 // Get art crop URL for background
 function getArtCropUrl(card: ScryfallCard | null): string | null {
@@ -84,7 +82,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const { commander, generatedDeck, reset } = useStore();
   const navigate = useNavigate();
 
-  const handleStartOver = () => {
+  const handleLogoClick = () => {
     reset();
     navigate('/');
   };
@@ -100,7 +98,10 @@ function Layout({ children }: { children: React.ReactNode }) {
         <header className="border-b border-border/50 bg-card/70 backdrop-blur-md sticky top-0 z-40">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
-              <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+              <button
+                onClick={handleLogoClick}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity text-left"
+              >
                 <img
                   src={`${import.meta.env.BASE_URL}logo.png`}
                   alt="EDH Deck Builder"
@@ -112,17 +113,7 @@ function Layout({ children }: { children: React.ReactNode }) {
                     Generate Commander decks instantly
                   </p>
                 </div>
-              </Link>
-              {(commander || generatedDeck) && (
-                <Button
-                  variant="outline"
-                  onClick={handleStartOver}
-                  className="hover-lift bg-card/50 backdrop-blur-sm"
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  Start Over
-                </Button>
-              )}
+              </button>
             </div>
           </div>
         </header>

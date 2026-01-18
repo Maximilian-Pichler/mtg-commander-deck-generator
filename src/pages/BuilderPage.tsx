@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArchetypeDisplay } from '@/components/archetype/ArchetypeDisplay';
 import { DeckCustomizer } from '@/components/customization/DeckCustomizer';
 import { DeckDisplay } from '@/components/deck/DeckDisplay';
+import { PartnerSelector } from '@/components/commander/PartnerSelector';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ManaCost, ColorIdentity } from '@/components/ui/mtg-icons';
@@ -13,7 +14,7 @@ import {
   detectArchetypes,
   getArchetypeDefaultCustomization,
 } from '@/services/deckBuilder/archetypeDetector';
-import { fetchCommanderThemes } from '@/services/edhrec';
+import { fetchCommanderThemes, fetchPartnerThemes } from '@/services/edhrec';
 import { ARCHETYPE_LABELS } from '@/lib/constants/archetypes';
 import { applyCommanderTheme, resetTheme } from '@/lib/commanderTheme';
 import type { ThemeResult } from '@/types';
@@ -25,6 +26,7 @@ export function BuilderPage() {
   const [progress, setProgress] = useState('');
   const [isLoadingCommander, setIsLoadingCommander] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [partnerImageLoaded, setPartnerImageLoaded] = useState(false);
 
   const {
     commander,
@@ -147,15 +149,89 @@ export function BuilderPage() {
     loadCommanderFromUrl();
   }, [commanderName]);
 
-  // Apply commander color theme
+  // Apply commander color theme (uses combined color identity from both commanders)
   useEffect(() => {
-    if (commander?.color_identity) {
-      applyCommanderTheme(commander.color_identity);
+    if (colorIdentity.length > 0) {
+      applyCommanderTheme(colorIdentity);
     }
 
     // Reset theme when leaving the page
     return () => resetTheme();
-  }, [commander?.color_identity]);
+  }, [colorIdentity]);
+
+  // Reset partner image loaded state when partner changes
+  useEffect(() => {
+    setPartnerImageLoaded(false);
+  }, [partnerCommander?.id]);
+
+  // Track the previous partner to detect changes
+  const prevPartnerRef = useRef<string | null>(null);
+
+  // Re-fetch themes when partner commander changes
+  useEffect(() => {
+    const currentPartnerName = partnerCommander?.name ?? null;
+    const prevPartnerName = prevPartnerRef.current;
+
+    // Update ref for next comparison
+    prevPartnerRef.current = currentPartnerName;
+
+    // Skip if commander not loaded yet, or if partner hasn't actually changed
+    if (!commander || currentPartnerName === prevPartnerName) {
+      return;
+    }
+
+    async function refreshThemes() {
+      setThemesLoading(true);
+      setThemesError(null);
+
+      try {
+        let themes;
+        if (partnerCommander) {
+          // Fetch partner-specific themes
+          themes = await fetchPartnerThemes(commander!.name, partnerCommander.name);
+        } else {
+          // Fetch single commander themes
+          themes = await fetchCommanderThemes(commander!.name);
+        }
+
+        if (themes.length > 0) {
+          setEdhrecThemes(themes);
+
+          const themeResults: ThemeResult[] = themes.map((t, index) => ({
+            name: t.name,
+            source: 'edhrec' as const,
+            slug: t.slug,
+            deckCount: t.count,
+            popularityPercent: t.popularityPercent,
+            isSelected: index < 2,
+          }));
+
+          setSelectedThemes(themeResults);
+        } else {
+          setThemesError('No themes found on EDHREC');
+          // Fall back to local archetypes
+          const archetypes = detectArchetypes(commander!, partnerCommander ?? undefined);
+          if (archetypes.length > 0) {
+            const localThemes: ThemeResult[] = archetypes.slice(0, 3).map((a, index) => ({
+              name: ARCHETYPE_LABELS[a.archetype],
+              source: 'local' as const,
+              archetype: a.archetype,
+              score: a.score,
+              confidence: a.confidence,
+              isSelected: index === 0,
+            }));
+            setSelectedThemes(localThemes);
+          }
+        }
+      } catch {
+        setThemesError('Could not fetch EDHREC themes');
+      } finally {
+        setThemesLoading(false);
+      }
+    }
+
+    refreshThemes();
+  }, [partnerCommander?.name, commander?.name]);
 
   const handleGenerate = async () => {
     if (!commander) return;
@@ -225,63 +301,134 @@ export function BuilderPage() {
       {/* Commander Card Display - only show during customization */}
       {!generatedDeck && (
         <section className="mb-8">
-          <Card className="w-full max-w-lg mx-auto animate-scale-in overflow-hidden bg-card/80 backdrop-blur-sm">
-            <CardContent className="p-0">
-              <div className="flex">
-                {/* Card Image */}
-                <div className="relative w-40 shrink-0">
-                  {!imageLoaded && (
-                    <div className="absolute inset-0 shimmer rounded-l-xl" />
-                  )}
-                  <img
-                    src={getCardImageUrl(commander, 'normal')}
-                    alt={commander.name}
-                    className={`w-full h-full object-cover rounded-l-xl transition-opacity duration-300 ${
-                      imageLoaded ? 'opacity-100' : 'opacity-0'
-                    }`}
-                    onLoad={() => setImageLoaded(true)}
-                  />
-                </div>
-
-                {/* Card Details */}
-                <div className="flex-1 p-4 flex flex-col">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-bold text-lg leading-tight">
-                      {commander.name}
-                    </h3>
-                    <a
-                      href={`https://edhrec.com/commanders/${commander.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
-                      title="View on EDHREC"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  </div>
-
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {commander.type_line}
-                  </p>
-
-                  {/* Color Identity */}
-                  <div className="mt-3">
-                    <ColorIdentity colors={commander.color_identity} size="lg" />
-                  </div>
-
-                  {/* Mana Cost */}
-                  {commander.mana_cost && (
-                    <div className="mt-auto pt-3 flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        Mana Cost:
-                      </span>
-                      <ManaCost cost={commander.mana_cost} />
+          <div className={`w-full mx-auto ${partnerCommander ? 'max-w-3xl' : 'max-w-lg'}`}>
+            <div className={`grid gap-4 ${partnerCommander ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
+              {/* Primary Commander Card */}
+              <Card className="animate-scale-in overflow-hidden bg-card/80 backdrop-blur-sm">
+                <CardContent className="p-0">
+                  <div className="flex">
+                    {/* Card Image */}
+                    <div className="relative w-40 shrink-0">
+                      {!imageLoaded && (
+                        <div className="absolute inset-0 shimmer rounded-l-xl" />
+                      )}
+                      <img
+                        src={getCardImageUrl(commander, 'normal')}
+                        alt={commander.name}
+                        className={`w-full h-full object-cover rounded-l-xl transition-opacity duration-300 ${
+                          imageLoaded ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        onLoad={() => setImageLoaded(true)}
+                      />
                     </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+
+                    {/* Card Details */}
+                    <div className="flex-1 p-4 flex flex-col">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-lg leading-tight">
+                          {commander.name}
+                        </h3>
+                        <a
+                          href={`https://edhrec.com/commanders/${commander.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                          title="View on EDHREC"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {commander.type_line}
+                      </p>
+
+                      {/* Color Identity - show combined when partner exists */}
+                      <div className="mt-3">
+                        <ColorIdentity colors={partnerCommander ? colorIdentity : commander.color_identity} size="lg" />
+                      </div>
+
+                      {/* Mana Cost */}
+                      {commander.mana_cost && (
+                        <div className="mt-auto pt-3 flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            Mana Cost:
+                          </span>
+                          <ManaCost cost={commander.mana_cost} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Partner Commander Card (if selected) */}
+              {partnerCommander && (
+                <Card className="animate-scale-in overflow-hidden bg-card/80 backdrop-blur-sm">
+                  <CardContent className="p-0">
+                    <div className="flex">
+                      {/* Card Image */}
+                      <div className="relative w-40 shrink-0">
+                        {!partnerImageLoaded && (
+                          <div className="absolute inset-0 shimmer rounded-l-xl" />
+                        )}
+                        <img
+                          src={getCardImageUrl(partnerCommander, 'normal')}
+                          alt={partnerCommander.name}
+                          className={`w-full h-full object-cover rounded-l-xl transition-opacity duration-300 ${
+                            partnerImageLoaded ? 'opacity-100' : 'opacity-0'
+                          }`}
+                          onLoad={() => setPartnerImageLoaded(true)}
+                        />
+                      </div>
+
+                      {/* Card Details */}
+                      <div className="flex-1 p-4 flex flex-col">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-bold text-lg leading-tight">
+                            {partnerCommander.name}
+                          </h3>
+                          <a
+                            href={`https://edhrec.com/commanders/${partnerCommander.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                            title="View on EDHREC"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        </div>
+
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {partnerCommander.type_line}
+                        </p>
+
+                        {/* Partner's individual color identity */}
+                        <div className="mt-3">
+                          <ColorIdentity colors={partnerCommander.color_identity} size="lg" />
+                        </div>
+
+                        {/* Mana Cost */}
+                        {partnerCommander.mana_cost && (
+                          <div className="mt-auto pt-3 flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              Mana Cost:
+                            </span>
+                            <ManaCost cost={partnerCommander.mana_cost} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Partner Selector - only show for commanders that can have partners */}
+            <div className="max-w-lg mx-auto">
+              <PartnerSelector commander={commander} />
+            </div>
+          </div>
         </section>
       )}
 
@@ -355,7 +502,10 @@ export function BuilderPage() {
               <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 font-bold text-sm">
                 ✓
               </div>
-              <h2 className="text-xl font-bold">Deck generated for {commander.name}</h2>
+              <h2 className="text-xl font-bold">
+                Deck generated for {commander.name}
+                {partnerCommander && ` & ${partnerCommander.name}`}
+              </h2>
             </div>
           </div>
           <DeckDisplay />

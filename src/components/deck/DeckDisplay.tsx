@@ -720,12 +720,17 @@ export function DeckDisplay() {
           </div>
         </div>
 
+        {/* Stats - Mobile/Tablet (above deck list) */}
+        <div className="xl:hidden mb-6">
+          <DeckStats />
+        </div>
+
         {/* Main Content */}
         <div className="flex gap-6">
           {/* Deck List */}
           <div className="flex-1 bg-card/30 rounded-lg border border-border/50 overflow-hidden">
             {viewMode === 'list' ? (
-              <div className="columns-3 xl:columns-4 p-2 gap-6">
+              <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 p-2 gap-6">
                 {TYPE_ORDER.map((type) => (
                   <CategoryColumn
                     key={type}
@@ -763,7 +768,7 @@ export function DeckDisplay() {
             )}
           </div>
 
-          {/* Stats Sidebar */}
+          {/* Stats Sidebar - Desktop only */}
           <div className="hidden xl:block w-64 shrink-0">
             <DeckStats />
           </div>

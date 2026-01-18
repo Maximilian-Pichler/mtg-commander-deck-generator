@@ -1,4 +1,5 @@
 import type { ScryfallCard, ScryfallSearchResponse } from '@/types';
+import { getPartnerType, getPartnerWithName } from '@/lib/partnerUtils';
 
 const BASE_URL = 'https://api.scryfall.com';
 const MIN_REQUEST_DELAY = 100; // 100ms between requests (10/sec max)
@@ -122,4 +123,74 @@ export function getOracleText(card: ScryfallCard): string {
   }
 
   return '';
+}
+
+/**
+ * Search for valid partner commanders based on the primary commander's partner type
+ */
+export async function searchValidPartners(
+  commander: ScryfallCard,
+  searchQuery = ''
+): Promise<ScryfallCard[]> {
+  const partnerType = getPartnerType(commander);
+
+  if (partnerType === 'none') {
+    return [];
+  }
+
+  let query: string;
+
+  switch (partnerType) {
+    case 'partner':
+      // Generic Partner - find other commanders with Partner keyword (excluding "Partner with X")
+      query = `is:commander f:commander keyword:partner -o:"Partner with"`;
+      break;
+
+    case 'partner-with': {
+      // Partner with X - fetch the specific card
+      const partnerName = getPartnerWithName(commander);
+      if (!partnerName) return [];
+      try {
+        const partner = await getCardByName(partnerName, true);
+        return partner ? [partner] : [];
+      } catch {
+        return [];
+      }
+    }
+
+    case 'friends-forever':
+      // Friends forever - find other commanders with Friends forever keyword
+      query = `is:commander f:commander keyword:"Friends forever"`;
+      break;
+
+    case 'choose-background':
+      // Choose a Background - find Background enchantments
+      query = `t:background`;
+      break;
+
+    case 'background':
+      // Background - find commanders with "Choose a Background"
+      query = `is:commander f:commander o:"Choose a Background"`;
+      break;
+
+    default:
+      return [];
+  }
+
+  // Add user search query if provided
+  if (searchQuery.trim()) {
+    query = `${query} ${searchQuery}`;
+  }
+
+  try {
+    const encodedQuery = encodeURIComponent(query);
+    const response = await scryfallFetch<ScryfallSearchResponse>(
+      `/cards/search?q=${encodedQuery}&order=edhrec`
+    );
+
+    // Filter out the commander itself from results
+    return response.data.filter((card) => card.name !== commander.name);
+  } catch {
+    return [];
+  }
 }

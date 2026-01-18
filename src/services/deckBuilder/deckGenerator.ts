@@ -194,11 +194,43 @@ async function pickFromEDHREC(
   return result;
 }
 
+// Merge type-specific cards with allNonLand cards (which includes topcards, highsynergycards, etc.)
+// This ensures cards from generic EDHREC lists get considered for each type slot
+function mergeWithAllNonLand(
+  typeSpecificCards: EDHRECCard[],
+  allNonLand: EDHRECCard[]
+): EDHRECCard[] {
+  const seenNames = new Set(typeSpecificCards.map(c => c.name));
+  const additionalCards = allNonLand.filter(c =>
+    c.primary_type === 'Unknown' && !seenNames.has(c.name)
+  );
+  // Return type-specific cards first (they're pre-categorized), then unknown-type cards
+  return [...typeSpecificCards, ...additionalCards];
+}
+
+// Check if a card's type_line matches the expected type
+function matchesExpectedType(typeLine: string, expectedType: string): boolean {
+  const normalizedType = expectedType.toLowerCase();
+  const normalizedTypeLine = typeLine.toLowerCase();
+
+  // Handle the main card types
+  if (normalizedType === 'creature') return normalizedTypeLine.includes('creature');
+  if (normalizedType === 'instant') return normalizedTypeLine.includes('instant');
+  if (normalizedType === 'sorcery') return normalizedTypeLine.includes('sorcery');
+  if (normalizedType === 'artifact') return normalizedTypeLine.includes('artifact') && !normalizedTypeLine.includes('creature');
+  if (normalizedType === 'enchantment') return normalizedTypeLine.includes('enchantment') && !normalizedTypeLine.includes('creature');
+  if (normalizedType === 'planeswalker') return normalizedTypeLine.includes('planeswalker');
+  if (normalizedType === 'land') return normalizedTypeLine.includes('land');
+
+  return false;
+}
+
 // Pick cards from EDHREC list with CMC-aware selection
 // Since EDHREC cards don't have CMC, we:
 // 1. Sort primarily by inclusion rate (EDHREC's main metric)
 // 2. Fetch from Scryfall to get actual CMC
 // 3. Use CMC for curve tracking and soft enforcement
+// 4. Optionally filter by expected type (for cards from generic lists like 'topcards')
 async function pickFromEDHRECWithCurve(
   edhrecCards: EDHRECCard[],
   count: number,
@@ -207,7 +239,8 @@ async function pickFromEDHRECWithCurve(
   curveTargets: Record<number, number>,
   currentCurveCounts: Record<number, number>,
   onProgress?: (message: string) => void,
-  bannedCards: Set<string> = new Set()
+  bannedCards: Set<string> = new Set(),
+  expectedType?: string // Optional type filter for cards with Unknown primary_type
 ): Promise<ScryfallCard[]> {
   const result: ScryfallCard[] = [];
 
@@ -224,6 +257,14 @@ async function pickFromEDHRECWithCurve(
     const scryfallCard = await edhrecToScryfall(edhrecCard);
 
     if (scryfallCard) {
+      // For cards with Unknown type (from generic lists like topcards/highsynergycards),
+      // verify they match the expected type before including them
+      if (expectedType && edhrecCard.primary_type === 'Unknown') {
+        if (!matchesExpectedType(scryfallCard.type_line, expectedType)) {
+          continue; // Skip - this card doesn't match the expected type
+        }
+      }
+
       // Verify color identity matches commander's colors
       if (!fitsColorIdentity(scryfallCard, colorIdentity)) {
         console.warn(`Skipping ${scryfallCard.name} - color identity ${scryfallCard.color_identity} doesn't fit ${colorIdentity}`);
@@ -670,18 +711,21 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     const { cardlists } = edhrecData;
 
     // 1. Creatures - use EDHREC type target count
+    // Merge with allNonLand to include cards from topcards/highsynergycards lists
     const creatureTarget = typeTargets.creature || targets.creatures;
-    console.log(`[DeckGen] Creatures: need ${creatureTarget}, EDHREC has ${cardlists.creatures.length} available`);
+    const creaturePool = mergeWithAllNonLand(cardlists.creatures, cardlists.allNonLand);
+    console.log(`[DeckGen] Creatures: need ${creatureTarget}, pool has ${creaturePool.length} cards (${cardlists.creatures.length} typed + ${creaturePool.length - cardlists.creatures.length} from generic lists)`);
     onProgress?.(`Selecting ${creatureTarget} creatures...`);
     const creatures = await pickFromEDHRECWithCurve(
-      cardlists.creatures,
+      creaturePool,
       creatureTarget,
       usedNames,
       colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
-      bannedCards
+      bannedCards,
+      'Creature'
     );
     categories.creatures.push(...creatures);
     console.log(`[DeckGen] Creatures: got ${creatures.length} from EDHREC`);
@@ -709,86 +753,96 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
 
     // 2. Instants - use EDHREC type target count, then categorize by function
     const instantTarget = typeTargets.instant || 0;
-    console.log(`[DeckGen] Instants: need ${instantTarget}, EDHREC has ${cardlists.instants.length} available`);
+    const instantPool = mergeWithAllNonLand(cardlists.instants, cardlists.allNonLand);
+    console.log(`[DeckGen] Instants: need ${instantTarget}, pool has ${instantPool.length} cards (${cardlists.instants.length} typed + ${instantPool.length - cardlists.instants.length} from generic lists)`);
     onProgress?.(`Selecting ${instantTarget} instants...`);
     const instants = await pickFromEDHRECWithCurve(
-      cardlists.instants,
+      instantPool,
       instantTarget,
       usedNames,
       colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
-      bannedCards
+      bannedCards,
+      'Instant'
     );
     console.log(`[DeckGen] Instants: got ${instants.length} from EDHREC`);
     categorizeInstants(instants, categories);
 
     // 3. Sorceries - use EDHREC type target count, then categorize by function
     const sorceryTarget = typeTargets.sorcery || 0;
-    console.log(`[DeckGen] Sorceries: need ${sorceryTarget}, EDHREC has ${cardlists.sorceries.length} available`);
+    const sorceryPool = mergeWithAllNonLand(cardlists.sorceries, cardlists.allNonLand);
+    console.log(`[DeckGen] Sorceries: need ${sorceryTarget}, pool has ${sorceryPool.length} cards (${cardlists.sorceries.length} typed + ${sorceryPool.length - cardlists.sorceries.length} from generic lists)`);
     onProgress?.(`Selecting ${sorceryTarget} sorceries...`);
     const sorceries = await pickFromEDHRECWithCurve(
-      cardlists.sorceries,
+      sorceryPool,
       sorceryTarget,
       usedNames,
       colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
-      bannedCards
+      bannedCards,
+      'Sorcery'
     );
     console.log(`[DeckGen] Sorceries: got ${sorceries.length} from EDHREC`);
     categorizeSorceries(sorceries, categories);
 
     // 4. Artifacts - use EDHREC type target count, then categorize by function
     const artifactTarget = typeTargets.artifact || 0;
-    console.log(`[DeckGen] Artifacts: need ${artifactTarget}, EDHREC has ${cardlists.artifacts.length} available`);
+    const artifactPool = mergeWithAllNonLand(cardlists.artifacts, cardlists.allNonLand);
+    console.log(`[DeckGen] Artifacts: need ${artifactTarget}, pool has ${artifactPool.length} cards (${cardlists.artifacts.length} typed + ${artifactPool.length - cardlists.artifacts.length} from generic lists)`);
     onProgress?.(`Selecting ${artifactTarget} artifacts...`);
     const artifacts = await pickFromEDHRECWithCurve(
-      cardlists.artifacts,
+      artifactPool,
       artifactTarget,
       usedNames,
       colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
-      bannedCards
+      bannedCards,
+      'Artifact'
     );
     console.log(`[DeckGen] Artifacts: got ${artifacts.length} from EDHREC`);
     categorizeArtifacts(artifacts, categories);
 
     // 5. Enchantments - use EDHREC type target count, then categorize by function
     const enchantmentTarget = typeTargets.enchantment || 0;
-    console.log(`[DeckGen] Enchantments: need ${enchantmentTarget}, EDHREC has ${cardlists.enchantments.length} available`);
+    const enchantmentPool = mergeWithAllNonLand(cardlists.enchantments, cardlists.allNonLand);
+    console.log(`[DeckGen] Enchantments: need ${enchantmentTarget}, pool has ${enchantmentPool.length} cards (${cardlists.enchantments.length} typed + ${enchantmentPool.length - cardlists.enchantments.length} from generic lists)`);
     onProgress?.(`Selecting ${enchantmentTarget} enchantments...`);
     const enchantments = await pickFromEDHRECWithCurve(
-      cardlists.enchantments,
+      enchantmentPool,
       enchantmentTarget,
       usedNames,
       colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
-      bannedCards
+      bannedCards,
+      'Enchantment'
     );
     console.log(`[DeckGen] Enchantments: got ${enchantments.length} from EDHREC`);
     categorizeEnchantments(enchantments, categories);
 
     // 6. Planeswalkers - use EDHREC type target count
     const planeswalkerTarget = typeTargets.planeswalker || 0;
-    console.log(`[DeckGen] Planeswalkers: need ${planeswalkerTarget}, EDHREC has ${cardlists.planeswalkers.length} available`);
-    if (cardlists.planeswalkers.length > 0 && planeswalkerTarget > 0) {
+    const planeswalkerPool = mergeWithAllNonLand(cardlists.planeswalkers, cardlists.allNonLand);
+    console.log(`[DeckGen] Planeswalkers: need ${planeswalkerTarget}, pool has ${planeswalkerPool.length} cards (${cardlists.planeswalkers.length} typed + ${planeswalkerPool.length - cardlists.planeswalkers.length} from generic lists)`);
+    if (planeswalkerPool.length > 0 && planeswalkerTarget > 0) {
       onProgress?.(`Selecting ${planeswalkerTarget} planeswalkers...`);
       const planeswalkers = await pickFromEDHRECWithCurve(
-        cardlists.planeswalkers,
+        planeswalkerPool,
         planeswalkerTarget,
         usedNames,
         colorIdentity,
         curveTargets,
         currentCurveCounts,
         onProgress,
-        bannedCards
+        bannedCards,
+        'Planeswalker'
       );
       console.log(`[DeckGen] Planeswalkers: got ${planeswalkers.length} from EDHREC`);
       categories.utility.push(...planeswalkers);

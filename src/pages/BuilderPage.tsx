@@ -17,7 +17,7 @@ import { fetchCommanderThemes } from '@/services/edhrec';
 import { ARCHETYPE_LABELS } from '@/lib/constants/archetypes';
 import { applyCommanderTheme, resetTheme } from '@/lib/commanderTheme';
 import type { ThemeResult } from '@/types';
-import { Loader2, Wand2, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Loader2, Wand2, ArrowLeft, ExternalLink } from 'lucide-react';
 
 export function BuilderPage() {
   const { commanderName } = useParams<{ commanderName: string }>();
@@ -195,11 +195,6 @@ export function BuilderPage() {
     navigate('/');
   };
 
-  const handleClearCommander = () => {
-    reset();
-    navigate('/');
-  };
-
   if (isLoadingCommander) {
     return (
       <main className="flex-1 container mx-auto px-4 py-8">
@@ -253,14 +248,15 @@ export function BuilderPage() {
                   <h3 className="font-bold text-lg leading-tight">
                     {commander.name}
                   </h3>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleClearCommander}
-                    className="shrink-0 h-8 w-8"
+                  <a
+                    href={`https://edhrec.com/commanders/${commander.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                    title="View on EDHREC"
                   >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
                 </div>
 
                 <p className="text-sm text-muted-foreground mt-1">

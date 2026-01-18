@@ -33,6 +33,13 @@ interface GenerationContext {
   onProgress?: (message: string) => void;
 }
 
+// Check if a card's color identity fits within the commander's color identity
+function fitsColorIdentity(card: ScryfallCard, commanderColors: string[]): boolean {
+  const cardColors = card.color_identity || [];
+  // Every color in the card's identity must be in the commander's identity
+  return cardColors.every(color => commanderColors.includes(color));
+}
+
 // Return type for calculateTargetCounts
 interface TargetCountsResult {
   composition: DeckComposition;
@@ -159,6 +166,7 @@ async function pickFromEDHREC(
   edhrecCards: EDHRECCard[],
   count: number,
   usedNames: Set<string>,
+  colorIdentity: string[],
   onProgress?: (message: string) => void,
   bannedCards: Set<string> = new Set()
 ): Promise<ScryfallCard[]> {
@@ -173,6 +181,11 @@ async function pickFromEDHREC(
     const scryfallCard = await edhrecToScryfall(edhrecCard);
 
     if (scryfallCard) {
+      // Verify color identity matches commander's colors
+      if (!fitsColorIdentity(scryfallCard, colorIdentity)) {
+        console.warn(`Skipping ${scryfallCard.name} - color identity ${scryfallCard.color_identity} doesn't fit ${colorIdentity}`);
+        continue;
+      }
       result.push(scryfallCard);
       usedNames.add(edhrecCard.name);
     }
@@ -190,6 +203,7 @@ async function pickFromEDHRECWithCurve(
   edhrecCards: EDHRECCard[],
   count: number,
   usedNames: Set<string>,
+  colorIdentity: string[],
   curveTargets: Record<number, number>,
   currentCurveCounts: Record<number, number>,
   onProgress?: (message: string) => void,
@@ -210,6 +224,12 @@ async function pickFromEDHRECWithCurve(
     const scryfallCard = await edhrecToScryfall(edhrecCard);
 
     if (scryfallCard) {
+      // Verify color identity matches commander's colors
+      if (!fitsColorIdentity(scryfallCard, colorIdentity)) {
+        console.warn(`Skipping ${scryfallCard.name} - color identity ${scryfallCard.color_identity} doesn't fit ${colorIdentity}`);
+        continue;
+      }
+
       // Use the actual CMC from Scryfall (EDHREC doesn't have it)
       const cmc = Math.min(Math.floor(scryfallCard.cmc), 7);
 
@@ -394,7 +414,7 @@ async function generateLands(
   if (nonBasicTarget > 0 && nonBasicEdhrecLands.length > 0) {
     onProgress?.('Fetching non-basic lands...');
     console.log(`[DeckGen] Picking ${nonBasicTarget} non-basic lands from ${nonBasicEdhrecLands.length} EDHREC suggestions`);
-    const nonBasics = await pickFromEDHREC(nonBasicEdhrecLands, nonBasicTarget, usedNames, onProgress, bannedCards);
+    const nonBasics = await pickFromEDHREC(nonBasicEdhrecLands, nonBasicTarget, usedNames, colorIdentity, onProgress, bannedCards);
     lands.push(...nonBasics);
     console.log(`[DeckGen] Got ${nonBasics.length} non-basic lands:`, nonBasics.map(l => l.name));
   }
@@ -657,6 +677,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       cardlists.creatures,
       creatureTarget,
       usedNames,
+      colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
@@ -694,6 +715,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       cardlists.instants,
       instantTarget,
       usedNames,
+      colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
@@ -710,6 +732,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       cardlists.sorceries,
       sorceryTarget,
       usedNames,
+      colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
@@ -726,6 +749,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       cardlists.artifacts,
       artifactTarget,
       usedNames,
+      colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
@@ -742,6 +766,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       cardlists.enchantments,
       enchantmentTarget,
       usedNames,
+      colorIdentity,
       curveTargets,
       currentCurveCounts,
       onProgress,
@@ -759,6 +784,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
         cardlists.planeswalkers,
         Math.min(planeswalkerTarget, 3),
         usedNames,
+        colorIdentity,
         curveTargets,
         currentCurveCounts,
         onProgress,

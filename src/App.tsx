@@ -157,7 +157,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/mtg-commander-deck-generator">
       <Routes>
         <Route path="/" element={<Layout><HomePage /></Layout>} />
         <Route path="/build/:commanderName" element={<Layout><BuilderPage /></Layout>} />

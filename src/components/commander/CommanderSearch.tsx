@@ -60,7 +60,9 @@ export function CommanderSearch() {
   return (
     <div className="w-full max-w-lg mx-auto relative">
       <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <div className="absolute left-4 inset-y-0 flex items-center pointer-events-none">
+          <Search className="w-5 h-5 text-muted-foreground" />
+        </div>
         <Input
           type="text"
           placeholder="Search for a commander..."
@@ -70,7 +72,9 @@ export function CommanderSearch() {
           className="pl-12 pr-12 h-14 text-lg rounded-xl bg-card border-border/50 focus:border-primary"
         />
         {isSearching && (
-          <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-primary" />
+          <div className="absolute right-4 inset-y-0 flex items-center pointer-events-none">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          </div>
         )}
       </div>
 

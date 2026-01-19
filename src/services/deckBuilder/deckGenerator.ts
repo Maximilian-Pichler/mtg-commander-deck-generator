@@ -972,8 +972,10 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     );
   }
 
-  // Calculate the target deck size (commander is separate)
-  const targetDeckSize = format === 99 ? 99 : format - 1;
+  // Calculate the target deck size (commander(s) are separate)
+  // With partner, we need one fewer card since both commanders count toward the total
+  const commanderCount = partnerCommander ? 2 : 1;
+  const targetDeckSize = format === 99 ? (100 - commanderCount) : (format - commanderCount);
 
   // Helper to count all cards
   const countAllCards = () => Object.values(categories).flat().length;

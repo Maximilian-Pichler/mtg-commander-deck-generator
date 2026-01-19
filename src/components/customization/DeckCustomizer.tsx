@@ -5,16 +5,24 @@ import { DECK_FORMAT_CONFIGS } from '@/lib/constants/archetypes';
 import { BannedCards } from './BannedCards';
 
 export function DeckCustomizer() {
-  const { customization, updateCustomization, commander } = useStore();
+  const { customization, updateCustomization, commander, partnerCommander } = useStore();
 
   if (!commander) return null;
+
+  // Generate dynamic description based on partner status
+  const getFormatDescription = (size: DeckFormat): string => {
+    const commanderCount = partnerCommander ? 2 : 1;
+    const cardCount = size === 99 ? (100 - commanderCount) : (size - commanderCount);
+    const commanderText = partnerCommander ? 'commanders' : 'commander';
+    return `${cardCount} cards + ${commanderText}`;
+  };
 
   const formatOptions = ([40, 60, 99] as DeckFormat[]).map((size) => {
     const config = DECK_FORMAT_CONFIGS[size];
     return {
       value: size,
       label: config.label.split(' ')[0], // "Brawl (40)" -> "Brawl"
-      description: config.description,
+      description: getFormatDescription(size),
     };
   });
 

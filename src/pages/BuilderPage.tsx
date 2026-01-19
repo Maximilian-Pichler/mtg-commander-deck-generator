@@ -21,7 +21,7 @@ import type { ThemeResult } from '@/types';
 import { Loader2, Wand2, ArrowLeft, ExternalLink } from 'lucide-react';
 
 export function BuilderPage() {
-  const { commanderName } = useParams<{ commanderName: string }>();
+  const { commanderName, partnerName } = useParams<{ commanderName: string; partnerName?: string }>();
   const navigate = useNavigate();
   const [progress, setProgress] = useState('');
   const [isLoadingCommander, setIsLoadingCommander] = useState(false);
@@ -39,6 +39,7 @@ export function BuilderPage() {
     isLoading,
     loadingMessage,
     setCommander,
+    setPartnerCommander,
     setDetectedArchetypes,
     updateCustomization,
     setEdhrecThemes,
@@ -148,6 +149,48 @@ export function BuilderPage() {
 
     loadCommanderFromUrl();
   }, [commanderName]);
+
+  // Load partner commander from URL if present
+  useEffect(() => {
+    async function loadPartnerFromUrl() {
+      if (!partnerName || !commander) return;
+
+      const decodedPartnerName = decodeURIComponent(partnerName);
+
+      // Check if we already have this partner in store
+      if (partnerCommander?.name === decodedPartnerName) return;
+
+      try {
+        const partnerCard = await getCardByName(decodedPartnerName, true);
+        if (partnerCard) {
+          setPartnerCommander(partnerCard);
+          setPartnerImageLoaded(false);
+        }
+      } catch (error) {
+        console.error('Failed to load partner commander:', error);
+      }
+    }
+
+    loadPartnerFromUrl();
+  }, [partnerName, commander?.name]);
+
+  // Update URL when partner commander changes
+  useEffect(() => {
+    if (!commander || !commanderName) return;
+
+    const currentUrlPartner = partnerName ? decodeURIComponent(partnerName) : null;
+    const storePartner = partnerCommander?.name ?? null;
+
+    // Only update URL if the partner in store differs from URL
+    if (storePartner !== currentUrlPartner) {
+      const basePath = `/build/${encodeURIComponent(commander.name)}`;
+      const newPath = storePartner
+        ? `${basePath}/${encodeURIComponent(storePartner)}`
+        : basePath;
+
+      navigate(newPath, { replace: true });
+    }
+  }, [partnerCommander?.name, commander?.name, commanderName, partnerName, navigate]);
 
   // Apply commander color theme (uses combined color identity from both commanders)
   useEffect(() => {

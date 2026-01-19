@@ -165,7 +165,7 @@ function App() {
     <BrowserRouter basename="/mtg-commander-deck-generator">
       <Routes>
         <Route path="/" element={<Layout><HomePage /></Layout>} />
-        <Route path="/build/:commanderName" element={<Layout><BuilderPage /></Layout>} />
+        <Route path="/build/:commanderName/:partnerName?" element={<Layout><BuilderPage /></Layout>} />
       </Routes>
     </BrowserRouter>
   );

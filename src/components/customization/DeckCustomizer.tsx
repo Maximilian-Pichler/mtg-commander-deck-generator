@@ -61,26 +61,6 @@ export function DeckCustomizer() {
         </div>
       </div>
 
-      {/* Singleton Toggle */}
-      <div className="flex items-center justify-between">
-        <div>
-          <label className="text-sm font-medium">Singleton</label>
-          <p className="text-xs text-muted-foreground">One copy of each card</p>
-        </div>
-        <button
-          onClick={() => updateCustomization({ singleton: !customization.singleton })}
-          className={`relative w-12 h-6 rounded-full transition-colors ${
-            customization.singleton ? 'bg-primary' : 'bg-muted'
-          }`}
-        >
-          <span
-            className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-              customization.singleton ? 'left-7' : 'left-1'
-            }`}
-          />
-        </button>
-      </div>
-
       {/* Land Count */}
       <div>
         <div className="flex justify-between mb-2">

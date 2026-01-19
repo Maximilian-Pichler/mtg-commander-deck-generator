@@ -31,7 +31,6 @@ function saveBannedCards(cards: string[]): void {
 const defaultCustomization: Customization = {
   deckFormat: 99,
   landCount: 37,
-  singleton: true, // Commander format is singleton by default
   bannedCards: loadBannedCards(), // Load from localStorage
 };
 

@@ -391,7 +391,6 @@ async function fillWithScryfall(
   colorIdentity: string[],
   count: number,
   usedNames: Set<string>,
-  singleton: boolean,
   bannedCards: Set<string> = new Set()
 ): Promise<ScryfallCard[]> {
   if (count <= 0) return [];
@@ -402,7 +401,7 @@ async function fillWithScryfall(
 
     for (const card of response.data) {
       if (result.length >= count) break;
-      if (singleton && usedNames.has(card.name)) continue;
+      if (usedNames.has(card.name)) continue; // Commander format is always singleton
       if (bannedCards.has(card.name)) continue; // Skip banned cards
 
       result.push(card);
@@ -464,7 +463,7 @@ async function generateLands(
   if (lands.length < nonBasicTarget) {
     onProgress?.('Finding additional lands...');
     const query = `t:land (${colorIdentity.map((c) => `o:{${c}}`).join(' OR ')}) -t:basic`;
-    const moreLands = await fillWithScryfall(query, colorIdentity, nonBasicTarget - lands.length, usedNames, true, bannedCards);
+    const moreLands = await fillWithScryfall(query, colorIdentity, nonBasicTarget - lands.length, usedNames, bannedCards);
     lands.push(...moreLands);
   }
 
@@ -614,7 +613,6 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
   } = context;
 
   const format = customization.deckFormat;
-  const singleton = customization.singleton;
   const usedNames = new Set<string>();
   const bannedCards = new Set(customization.bannedCards || []);
 
@@ -739,7 +737,6 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
         colorIdentity,
         needed,
         usedNames,
-        singleton,
         bannedCards
       );
       categories.creatures.push(...moreCreatures);
@@ -905,7 +902,6 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       colorIdentity,
       targets.ramp,
       usedNames,
-      singleton,
       bannedCards
     );
 
@@ -915,7 +911,6 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       colorIdentity,
       targets.cardDraw,
       usedNames,
-      singleton,
       bannedCards
     );
 
@@ -925,7 +920,6 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       colorIdentity,
       targets.singleRemoval,
       usedNames,
-      singleton,
       bannedCards
     );
 
@@ -935,7 +929,6 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       colorIdentity,
       targets.boardWipes,
       usedNames,
-      singleton,
       bannedCards
     );
 
@@ -945,7 +938,6 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       colorIdentity,
       targets.creatures,
       usedNames,
-      singleton,
       bannedCards
     );
 
@@ -955,7 +947,6 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       colorIdentity,
       targets.synergy,
       usedNames,
-      singleton,
       bannedCards
     );
 

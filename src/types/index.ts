@@ -242,7 +242,6 @@ export interface DeckFormatConfig {
 export interface Customization {
   deckFormat: DeckFormat;
   landCount: number;
-  singleton: boolean; // Only one copy of each card (except basic lands)
   bannedCards: string[]; // Card names to exclude from deck generation
 }
 

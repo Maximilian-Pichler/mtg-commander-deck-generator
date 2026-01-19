@@ -227,11 +227,8 @@ function matchesExpectedType(typeLine: string, expectedType: string): boolean {
 }
 
 // Pick cards from EDHREC list with CMC-aware selection using batch fetching
-// Since EDHREC cards don't have CMC, we:
-// 1. Batch fetch all candidate cards from Scryfall
-// 2. Sort by inclusion rate (EDHREC's main metric)
-// 3. Use CMC for curve tracking and soft enforcement
-// 4. Optionally filter by expected type (for cards from generic lists like 'topcards')
+// Strategy: Prioritize typed cards first, then use Unknown cards as fallback
+// This prevents high-inclusion Unknown cards from crowding out typed cards
 async function pickFromEDHRECWithCurve(
   edhrecCards: EDHRECCard[],
   count: number,
@@ -245,55 +242,71 @@ async function pickFromEDHRECWithCurve(
 ): Promise<ScryfallCard[]> {
   const result: ScryfallCard[] = [];
 
-  // Filter candidates and sort by inclusion rate
-  const candidates = edhrecCards
+  // Helper to process a batch of candidates
+  const processBatch = async (
+    candidates: EDHRECCard[],
+    requireTypeCheck: boolean
+  ): Promise<void> => {
+    if (candidates.length === 0 || result.length >= count) return;
+
+    const remaining = count - result.length;
+    // Fetch more than needed to account for color identity and curve filtering
+    const namesToFetch = candidates.slice(0, remaining * 2).map(c => c.name);
+
+    const cardMap = await getCardsByNames(namesToFetch);
+
+    for (const edhrecCard of candidates) {
+      if (result.length >= count) break;
+
+      const scryfallCard = cardMap.get(edhrecCard.name);
+      if (!scryfallCard) continue;
+
+      // Type check only for Unknown cards
+      if (requireTypeCheck && expectedType) {
+        if (!matchesExpectedType(scryfallCard.type_line, expectedType)) {
+          continue;
+        }
+      }
+
+      // Verify color identity matches commander's colors
+      if (!fitsColorIdentity(scryfallCard, colorIdentity)) {
+        continue;
+      }
+
+      // Use the actual CMC from Scryfall (EDHREC doesn't have it)
+      const cmc = Math.min(Math.floor(scryfallCard.cmc), 7);
+
+      // Soft curve enforcement: skip low-inclusion cards if bucket is very overfilled
+      if (!hasCurveRoom(cmc, curveTargets, currentCurveCounts)) {
+        if (edhrecCard.inclusion < 40) {
+          continue;
+        }
+      }
+
+      result.push(scryfallCard);
+      usedNames.add(edhrecCard.name);
+      currentCurveCounts[cmc] = (currentCurveCounts[cmc] ?? 0) + 1;
+    }
+  };
+
+  // Separate typed cards (known type from EDHREC) from Unknown cards
+  const allCandidates = edhrecCards
     .filter(c => !usedNames.has(c.name) && !bannedCards.has(c.name))
     .sort((a, b) => b.inclusion - a.inclusion);
 
-  if (candidates.length === 0) return result;
+  const typedCards = allCandidates.filter(c => c.primary_type !== 'Unknown');
+  const unknownCards = allCandidates.filter(c => c.primary_type === 'Unknown');
 
-  // Fetch more than needed to account for filtering (type, color identity, curve)
-  const namesToFetch = candidates.slice(0, count * 3).map(c => c.name);
+  // Phase 1: Process typed cards first (no type verification needed)
+  if (typedCards.length > 0) {
+    onProgress?.(`Fetching ${Math.min(typedCards.length, count * 2)} typed cards...`);
+    await processBatch(typedCards, false);
+  }
 
-  onProgress?.(`Fetching ${namesToFetch.length} cards...`);
-  const cardMap = await getCardsByNames(namesToFetch);
-
-  // Process fetched cards in order of inclusion rate
-  for (const edhrecCard of candidates) {
-    if (result.length >= count) break;
-
-    const scryfallCard = cardMap.get(edhrecCard.name);
-    if (!scryfallCard) continue;
-
-    // For cards with Unknown type (from generic lists like topcards/highsynergycards),
-    // verify they match the expected type before including them
-    if (expectedType && edhrecCard.primary_type === 'Unknown') {
-      if (!matchesExpectedType(scryfallCard.type_line, expectedType)) {
-        continue; // Skip - this card doesn't match the expected type
-      }
-    }
-
-    // Verify color identity matches commander's colors
-    if (!fitsColorIdentity(scryfallCard, colorIdentity)) {
-      console.warn(`Skipping ${scryfallCard.name} - color identity ${scryfallCard.color_identity} doesn't fit ${colorIdentity}`);
-      continue;
-    }
-
-    // Use the actual CMC from Scryfall (EDHREC doesn't have it)
-    const cmc = Math.min(Math.floor(scryfallCard.cmc), 7);
-
-    // Soft curve enforcement: skip low-inclusion cards if bucket is very overfilled
-    // High-inclusion cards (>40%) always get through regardless of curve
-    if (!hasCurveRoom(cmc, curveTargets, currentCurveCounts)) {
-      if (edhrecCard.inclusion < 40) {
-        // Skip this card - curve is overfilled and it's not high-inclusion
-        continue;
-      }
-    }
-
-    result.push(scryfallCard);
-    usedNames.add(edhrecCard.name);
-    currentCurveCounts[cmc] = (currentCurveCounts[cmc] ?? 0) + 1;
+  // Phase 2: If we need more, process Unknown cards (with type verification)
+  if (result.length < count && unknownCards.length > 0) {
+    onProgress?.(`Fetching ${Math.min(unknownCards.length, (count - result.length) * 2)} additional cards...`);
+    await processBatch(unknownCards, true);
   }
 
   return result;

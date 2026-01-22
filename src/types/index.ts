@@ -102,6 +102,8 @@ export interface EDHRECCard {
   inclusion: number; // Percentage of decks that include this card
   num_decks: number; // Number of decks with this card
   synergy?: number; // Synergy score (-1 to 1)
+  // Track if this card came from a high-priority synergy list
+  isThemeSynergyCard?: boolean; // true if from highsynergycards, topcards, newcards, gamechangers
   prices?: {
     tcgplayer?: { price: number };
     cardkingdom?: { price: number };

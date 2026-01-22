@@ -102,7 +102,12 @@ export function calculateTypeTargets(
 ): Record<string, number> {
   const percentages = calculateTypePercentages(stats);
 
+  console.log('[CurveUtils] EDHREC type distribution:', stats.typeDistribution);
+  console.log('[CurveUtils] Calculated percentages:', percentages);
+  console.log('[CurveUtils] Total non-land cards to allocate:', totalNonLandCards);
+
   if (Object.keys(percentages).length === 0) {
+    console.log('[CurveUtils] Using fallback defaults (no EDHREC data)');
     // Fallback defaults
     return {
       creature: Math.round(totalNonLandCards * 0.45),
@@ -130,6 +135,8 @@ export function calculateTypeTargets(
   if (diff !== 0) {
     targets.creature = (targets.creature || 0) + diff;
   }
+
+  console.log('[CurveUtils] Final type targets:', targets, 'Total:', Object.values(targets).reduce((a, b) => a + b, 0));
 
   return targets;
 }

@@ -186,7 +186,39 @@ function pickFromPrefetched(
   return result;
 }
 
+// Check if a card is a high-priority theme synergy card
+function isHighSynergyCard(card: EDHRECCard): boolean {
+  // Card is from highsynergycards, topcards, newcards, or gamechangers lists
+  if (card.isThemeSynergyCard) return true;
+  // Or has a high synergy score (> 0.3)
+  if ((card.synergy ?? 0) > 0.3) return true;
+  return false;
+}
+
+// Calculate a priority score for EDHREC cards
+// High synergy cards (from theme) should be prioritized over generic high-inclusion cards
+function calculateCardPriority(card: EDHRECCard): number {
+  const synergy = card.synergy ?? 0;
+  const inclusion = card.inclusion;
+
+  // Cards from theme synergy lists (highsynergycards, topcards, etc.) get top priority
+  if (card.isThemeSynergyCard) {
+    // Theme synergy cards get a big boost: 100 + synergy bonus + inclusion
+    // This ensures they're prioritized over regular high-inclusion cards
+    return 100 + (synergy * 50) + inclusion;
+  }
+
+  // If synergy score is high (> 0.3), boost the card
+  if (synergy > 0.3) {
+    return (synergy * 100) + inclusion;
+  }
+
+  // For low/no synergy cards, just use inclusion
+  return inclusion;
+}
+
 // Pick cards with curve awareness from pre-fetched map (no API calls)
+// Prioritizes high-synergy theme cards over generic high-inclusion cards
 function pickFromPrefetchedWithCurve(
   edhrecCards: EDHRECCard[],
   cardMap: Map<string, ScryfallCard>,
@@ -200,23 +232,32 @@ function pickFromPrefetchedWithCurve(
 ): ScryfallCard[] {
   const result: ScryfallCard[] = [];
 
-  // Separate typed cards from Unknown cards
+  // Filter and sort ALL candidates by priority (synergy-aware)
   const allCandidates = edhrecCards
     .filter(c => !usedNames.has(c.name) && !bannedCards.has(c.name))
-    .sort((a, b) => b.inclusion - a.inclusion);
+    .sort((a, b) => calculateCardPriority(b) - calculateCardPriority(a));
 
-  const typedCards = allCandidates.filter(c => c.primary_type !== 'Unknown');
-  const unknownCards = allCandidates.filter(c => c.primary_type === 'Unknown');
+  // Separate into high-synergy cards (any type) and regular cards
+  const highSynergyCards = allCandidates.filter(c => isHighSynergyCard(c));
+  const regularTypedCards = allCandidates.filter(c => c.primary_type !== 'Unknown' && !isHighSynergyCard(c));
+  const regularUnknownCards = allCandidates.filter(c => c.primary_type === 'Unknown' && !isHighSynergyCard(c));
 
-  const processCards = (candidates: EDHRECCard[], requireTypeCheck: boolean): void => {
+  // Log high synergy card info for debugging
+  if (highSynergyCards.length > 0 && expectedType) {
+    console.log(`[DeckGen] ${expectedType}: Found ${highSynergyCards.length} high-synergy cards:`,
+      highSynergyCards.slice(0, 5).map(c => `${c.name} (synergy=${c.synergy}, isTheme=${c.isThemeSynergyCard})`));
+  }
+
+  const processCards = (candidates: EDHRECCard[], requireTypeCheckForUnknown: boolean): void => {
     for (const edhrecCard of candidates) {
       if (result.length >= count) break;
 
       const scryfallCard = cardMap.get(edhrecCard.name);
       if (!scryfallCard) continue;
 
-      // Type check only for Unknown cards
-      if (requireTypeCheck && expectedType) {
+      // Type check for Unknown cards (need to verify they match expected type via Scryfall)
+      // Cards already categorized by EDHREC (primary_type !== 'Unknown') skip this check
+      if (requireTypeCheckForUnknown && edhrecCard.primary_type === 'Unknown' && expectedType) {
         if (!matchesExpectedType(scryfallCard.type_line, expectedType)) {
           continue;
         }
@@ -227,10 +268,11 @@ function pickFromPrefetchedWithCurve(
         continue;
       }
 
-      // Curve enforcement
+      // Curve enforcement - but high synergy cards get more leniency
       const cmc = Math.min(Math.floor(scryfallCard.cmc), 7);
       if (!hasCurveRoom(cmc, curveTargets, currentCurveCounts)) {
-        if (edhrecCard.inclusion < 40) {
+        // High synergy cards or high inclusion (> 40%) can break curve
+        if (!isHighSynergyCard(edhrecCard) && edhrecCard.inclusion < 40) {
           continue;
         }
       }
@@ -241,12 +283,18 @@ function pickFromPrefetchedWithCurve(
     }
   };
 
-  // Phase 1: Process typed cards first
-  processCards(typedCards, false);
+  // Phase 1: Process HIGH SYNERGY cards first (these are the theme cards!)
+  // Need type check since high-synergy Unknown cards should match expected type
+  processCards(highSynergyCards, true);
 
-  // Phase 2: Process Unknown cards if needed
-  if (result.length < count && unknownCards.length > 0) {
-    processCards(unknownCards, true);
+  // Phase 2: Process regular typed cards (pre-categorized by EDHREC)
+  if (result.length < count) {
+    processCards(regularTypedCards, false);
+  }
+
+  // Phase 3: Process remaining Unknown cards if still needed
+  if (result.length < count && regularUnknownCards.length > 0) {
+    processCards(regularUnknownCards, true);
   }
 
   return result;
@@ -254,6 +302,7 @@ function pickFromPrefetchedWithCurve(
 
 // Merge type-specific cards with allNonLand cards (which includes topcards, highsynergycards, etc.)
 // This ensures cards from generic EDHREC lists get considered for each type slot
+// IMPORTANT: Sort by priority so high-synergy cards come first, not last!
 function mergeWithAllNonLand(
   typeSpecificCards: EDHRECCard[],
   allNonLand: EDHRECCard[]
@@ -262,8 +311,9 @@ function mergeWithAllNonLand(
   const additionalCards = allNonLand.filter(c =>
     c.primary_type === 'Unknown' && !seenNames.has(c.name)
   );
-  // Return type-specific cards first (they're pre-categorized), then unknown-type cards
-  return [...typeSpecificCards, ...additionalCards];
+  // Merge and sort by priority - high synergy cards should come FIRST
+  const merged = [...typeSpecificCards, ...additionalCards];
+  return merged.sort((a, b) => calculateCardPriority(b) - calculateCardPriority(a));
 }
 
 // Check if a card's type_line matches the expected type
@@ -576,7 +626,8 @@ function calculateStats(categories: Record<DeckCategory, ScryfallCard[]>): DeckS
 function mergeThemeCardlists(
   themeDataResults: EDHRECCommanderData[]
 ): EDHRECCommanderData['cardlists'] {
-  // Merge all cards, keeping highest inclusion rate for duplicates
+  // Merge all cards, keeping the best version for duplicates
+  // Prioritize: highest synergy first, then highest inclusion
   const mergeCards = (
     cards: EDHRECCard[][],
   ): EDHRECCard[] => {
@@ -585,13 +636,23 @@ function mergeThemeCardlists(
     for (const cardList of cards) {
       for (const card of cardList) {
         const existing = cardMap.get(card.name);
-        if (!existing || card.inclusion > existing.inclusion) {
+        if (!existing) {
           cardMap.set(card.name, card);
+        } else {
+          // Keep the card with better synergy, or if tied, better inclusion
+          const existingSynergy = existing.synergy ?? 0;
+          const newSynergy = card.synergy ?? 0;
+
+          if (newSynergy > existingSynergy ||
+              (newSynergy === existingSynergy && card.inclusion > existing.inclusion)) {
+            cardMap.set(card.name, card);
+          }
         }
       }
     }
 
-    return Array.from(cardMap.values()).sort((a, b) => b.inclusion - a.inclusion);
+    // Sort by priority (synergy-aware)
+    return Array.from(cardMap.values()).sort((a, b) => calculateCardPriority(b) - calculateCardPriority(a));
   };
 
   return {
@@ -705,7 +766,9 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
   );
 
   // Debug: Log expected card counts
+  const totalTypeTargets = Object.values(typeTargets).reduce((sum, v) => sum + v, 0);
   console.log('[DeckGen] Target type counts:', typeTargets);
+  console.log('[DeckGen] Total non-land target:', totalTypeTargets, '(should be ~', format === 99 ? 99 - targets.lands : format - 1 - targets.lands, ')');
   console.log('[DeckGen] Target curve:', curveTargets);
   console.log('[DeckGen] Land target:', targets.lands);
 
@@ -1003,8 +1066,9 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
   const countAllCards = () => Object.values(categories).flat().length;
 
   // If we have too many cards, trim from lowest priority categories
-  // Priority order for trimming: synergy, utility, creatures, then others
-  const trimOrder: DeckCategory[] = ['synergy', 'utility', 'creatures', 'cardDraw', 'ramp', 'singleRemoval', 'boardWipes'];
+  // Priority order for trimming: utility first, then creatures, then synergy
+  // Synergy cards are theme-specific and should be protected!
+  const trimOrder: DeckCategory[] = ['utility', 'creatures', 'synergy', 'cardDraw', 'ramp', 'singleRemoval', 'boardWipes'];
 
   let currentCount = countAllCards();
   while (currentCount > targetDeckSize) {
@@ -1024,35 +1088,58 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     currentCount = countAllCards();
   }
 
-  // If we have too few cards, add basic lands to fill (use cached cards)
+  // If we have too few cards, fill shortage
   currentCount = countAllCards();
   if (currentCount < targetDeckSize) {
     const shortage = targetDeckSize - currentCount;
-    const basicTypes: Record<string, string> = { W: 'Plains', U: 'Island', B: 'Swamp', R: 'Mountain', G: 'Forest' };
-    const colorsWithBasics = colorIdentity.filter((c) => basicTypes[c]);
+    console.log(`[DeckGen] Deck shortage: need ${shortage} more cards (have ${currentCount}, need ${targetDeckSize})`);
 
-    if (colorsWithBasics.length > 0) {
-      const perColor = Math.floor(shortage / colorsWithBasics.length);
-      const remainder = shortage % colorsWithBasics.length;
+    // First, try to fill with more synergy cards from Scryfall
+    const synergyNeeded = Math.min(shortage, 20); // Cap at 20 synergy cards
+    if (synergyNeeded > 0) {
+      const moreSynergy = await fillWithScryfall(
+        '(t:artifact OR t:enchantment OR t:creature)',
+        colorIdentity,
+        synergyNeeded,
+        usedNames,
+        bannedCards
+      );
+      categories.synergy.push(...moreSynergy);
+      console.log(`[DeckGen] Filled ${moreSynergy.length} synergy cards from Scryfall`);
+    }
 
-      for (let i = 0; i < colorsWithBasics.length; i++) {
-        const color = colorsWithBasics[i];
-        const basicName = basicTypes[color];
-        const countForColor = perColor + (i < remainder ? 1 : 0);
+    // If still short, add basic lands as last resort
+    currentCount = countAllCards();
+    if (currentCount < targetDeckSize) {
+      const remainingShortage = targetDeckSize - currentCount;
+      console.log(`[DeckGen] Still need ${remainingShortage} more cards, adding basic lands`);
 
-        // Try to get cached basic land first
-        let basicCard = getCachedCard(basicName);
-        if (!basicCard) {
-          try {
-            basicCard = await getCardByName(basicName, true);
-          } catch {
-            continue; // Skip if can't fetch
+      const basicTypes: Record<string, string> = { W: 'Plains', U: 'Island', B: 'Swamp', R: 'Mountain', G: 'Forest' };
+      const colorsWithBasics = colorIdentity.filter((c) => basicTypes[c]);
+
+      if (colorsWithBasics.length > 0) {
+        const perColor = Math.floor(remainingShortage / colorsWithBasics.length);
+        const remainder = remainingShortage % colorsWithBasics.length;
+
+        for (let i = 0; i < colorsWithBasics.length; i++) {
+          const color = colorsWithBasics[i];
+          const basicName = basicTypes[color];
+          const countForColor = perColor + (i < remainder ? 1 : 0);
+
+          // Try to get cached basic land first
+          let basicCard = getCachedCard(basicName);
+          if (!basicCard) {
+            try {
+              basicCard = await getCardByName(basicName, true);
+            } catch {
+              continue; // Skip if can't fetch
+            }
           }
-        }
 
-        // Add multiple copies with unique IDs
-        for (let j = 0; j < countForColor; j++) {
-          categories.lands.push({ ...basicCard, id: `${basicCard.id}-fill-${j}-${color}` });
+          // Add multiple copies with unique IDs
+          for (let j = 0; j < countForColor; j++) {
+            categories.lands.push({ ...basicCard, id: `${basicCard.id}-fill-${j}-${color}` });
+          }
         }
       }
     }

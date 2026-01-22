@@ -136,6 +136,9 @@ async function edhrecFetch<T>(endpoint: string): Promise<T> {
   return response.json();
 }
 
+// Tags that represent high-priority theme synergy cards
+const THEME_SYNERGY_TAGS = new Set(['newcards', 'highsynergycards', 'topcards', 'gamechangers']);
+
 /**
  * Parse raw EDHREC card into our format
  * @param raw - Raw card data from EDHREC
@@ -151,16 +154,18 @@ function parseCard(raw: RawEDHRECCard, tagHint?: string): EDHRECCard {
 
   // Derive primary_type from the cardlist tag if available
   let primaryType = 'Unknown';
-  if (tagHint) {
-    const tagLower = tagHint.toLowerCase();
-    if (tagLower === 'creatures') primaryType = 'Creature';
-    else if (tagLower === 'instants') primaryType = 'Instant';
-    else if (tagLower === 'sorceries') primaryType = 'Sorcery';
-    else if (tagLower === 'utilityartifacts' || tagLower === 'manaartifacts') primaryType = 'Artifact';
-    else if (tagLower === 'enchantments') primaryType = 'Enchantment';
-    else if (tagLower === 'planeswalkers') primaryType = 'Planeswalker';
-    else if (tagLower === 'utilitylands' || tagLower === 'lands') primaryType = 'Land';
-  }
+  const tagLower = tagHint?.toLowerCase() || '';
+
+  if (tagLower === 'creatures') primaryType = 'Creature';
+  else if (tagLower === 'instants') primaryType = 'Instant';
+  else if (tagLower === 'sorceries') primaryType = 'Sorcery';
+  else if (tagLower === 'utilityartifacts' || tagLower === 'manaartifacts') primaryType = 'Artifact';
+  else if (tagLower === 'enchantments') primaryType = 'Enchantment';
+  else if (tagLower === 'planeswalkers') primaryType = 'Planeswalker';
+  else if (tagLower === 'utilitylands' || tagLower === 'lands') primaryType = 'Land';
+
+  // Check if this card is from a high-priority synergy list
+  const isThemeSynergyCard = THEME_SYNERGY_TAGS.has(tagLower);
 
   return {
     name: raw.name,
@@ -169,6 +174,7 @@ function parseCard(raw: RawEDHRECCard, tagHint?: string): EDHRECCard {
     inclusion: inclusionPercent, // Now a percentage (0-100)
     num_decks: raw.num_decks || 0,
     synergy: raw.synergy,
+    isThemeSynergyCard,
     prices: raw.prices ? {
       tcgplayer: raw.prices.tcgplayer,
       cardkingdom: raw.prices.cardkingdom,

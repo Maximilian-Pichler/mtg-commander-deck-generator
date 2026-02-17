@@ -49,6 +49,8 @@ export interface ScryfallCard {
     commander: string;
     [format: string]: string;
   };
+  // Added during deck generation
+  isGameChanger?: boolean;
 }
 
 export interface ScryfallSearchResponse {
@@ -104,6 +106,7 @@ export interface EDHRECCard {
   synergy?: number; // Synergy score (-1 to 1)
   // Track if this card came from a high-priority synergy list
   isThemeSynergyCard?: boolean; // true if from highsynergycards, topcards, newcards, gamechangers
+  isGameChanger?: boolean; // true if from the gamechangers list specifically
   prices?: {
     tcgplayer?: { price: number };
     cardkingdom?: { price: number };

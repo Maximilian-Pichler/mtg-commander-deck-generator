@@ -182,6 +182,7 @@ function pickFromPrefetched(
 
     if (exceedsMaxPrice(scryfallCard, maxCardPrice)) continue;
 
+    if (edhrecCard.isGameChanger) scryfallCard.isGameChanger = true;
     result.push(scryfallCard);
     usedNames.add(edhrecCard.name);
   }
@@ -286,6 +287,7 @@ function pickFromPrefetchedWithCurve(
         }
       }
 
+      if (edhrecCard.isGameChanger) scryfallCard.isGameChanger = true;
       result.push(scryfallCard);
       usedNames.add(edhrecCard.name);
       currentCurveCounts[cmc] = (currentCurveCounts[cmc] ?? 0) + 1;

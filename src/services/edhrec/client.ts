@@ -172,6 +172,7 @@ function parseCard(raw: RawEDHRECCard, tagHint?: string): EDHRECCard {
 
   // Check if this card is from a high-priority synergy list
   const isThemeSynergyCard = THEME_SYNERGY_TAGS.has(tagLower);
+  const isGameChanger = tagLower === 'gamechangers';
 
   return {
     name: raw.name,
@@ -181,6 +182,7 @@ function parseCard(raw: RawEDHRECCard, tagHint?: string): EDHRECCard {
     num_decks: raw.num_decks || 0,
     synergy: raw.synergy,
     isThemeSynergyCard,
+    isGameChanger,
     prices: raw.prices ? {
       tcgplayer: raw.prices.tcgplayer,
       cardkingdom: raw.prices.cardkingdom,

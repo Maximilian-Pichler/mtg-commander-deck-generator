@@ -7,7 +7,6 @@ import type { ScryfallCard } from '@/types';
 import {
   Copy,
   Check,
-  ExternalLink,
   Download,
   X,
   Grid3X3,
@@ -232,7 +231,7 @@ function ExportModal({ isOpen, onClose, deckList }: ExportModalProps) {
         </div>
 
         <div className="p-4 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button onClick={handleCopy} variant="outline" className="flex-col h-auto py-3">
               {copied ? <Check className="w-5 h-5 mb-1 text-green-500" /> : <Copy className="w-5 h-5 mb-1" />}
               <span className="text-xs">{copied ? 'Copied!' : 'Copy'}</span>
@@ -241,24 +240,6 @@ function ExportModal({ isOpen, onClose, deckList }: ExportModalProps) {
               <Download className="w-5 h-5 mb-1" />
               <span className="text-xs">Download</span>
             </Button>
-            <a
-              href="https://www.moxfield.com/decks/new"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex flex-col items-center justify-center rounded-md text-sm font-medium h-auto py-3 border border-input bg-background hover:bg-accent transition-colors"
-            >
-              <ExternalLink className="w-5 h-5 mb-1" />
-              <span className="text-xs">Moxfield</span>
-            </a>
-            <a
-              href="https://archidekt.com/decks"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex flex-col items-center justify-center rounded-md text-sm font-medium h-auto py-3 border border-input bg-background hover:bg-accent transition-colors"
-            >
-              <ExternalLink className="w-5 h-5 mb-1" />
-              <span className="text-xs">Archidekt</span>
-            </a>
           </div>
 
           <textarea

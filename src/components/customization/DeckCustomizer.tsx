@@ -5,7 +5,7 @@ import type { DeckFormat, BudgetOption, GameChangerLimit, BracketLevel, MaxRarit
 import { getDeckFormatConfig } from '@/lib/constants/archetypes';
 import { BannedCards } from './BannedCards';
 import { MustIncludeCards } from './MustIncludeCards';
-import { LandIcon } from '@/components/ui/mtg-icons';
+
 
 export function DeckCustomizer() {
   const { customization, updateCustomization, commander, partnerCommander } = useStore();
@@ -210,11 +210,6 @@ export function DeckCustomizer() {
         </div>
       </div>
 
-      {/* Land Section Header */}
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <LandIcon size={16} className="text-muted-foreground" />
-        <span>Mana Base</span>
-      </div>
 
       {/* Land Count */}
       <div>
@@ -596,9 +591,12 @@ export function DeckCustomizer() {
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
             Other
-            {!otherOpen && customization.maxRarity !== null && (
+            {!otherOpen && (customization.maxRarity !== null || customization.tinyLeaders) && (
               <span className="text-[10px] font-normal text-primary bg-primary/20 px-1.5 py-0.5 rounded-full">
-                {customization.maxRarity} max
+                {[
+                  customization.maxRarity !== null ? `${customization.maxRarity} max` : null,
+                  customization.tinyLeaders ? 'Tiny Leaders' : null,
+                ].filter(Boolean).join(' · ')}
               </span>
             )}
           </span>
@@ -641,6 +639,27 @@ export function DeckCustomizer() {
                 ))}
               </div>
             </div>
+
+            {/* Tiny Leaders */}
+            <label className="flex items-center gap-3 cursor-pointer select-none group">
+              <input
+                type="checkbox"
+                checked={customization.tinyLeaders}
+                onChange={(e) => updateCustomization({ tinyLeaders: e.target.checked })}
+                className="rounded border-border accent-primary w-4 h-4"
+              />
+              <span className="text-sm font-medium group-hover:text-primary transition-colors">Tiny Leaders</span>
+              <span
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-help"
+                title="Experimental: Restricts all non-land cards to converted mana cost (CMC) 3 or less. The mana curve is compressed to fit within the 0-3 range."
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 16v-4" />
+                  <path d="M12 8h.01" />
+                </svg>
+              </span>
+            </label>
           </div>
         )}
       </div>

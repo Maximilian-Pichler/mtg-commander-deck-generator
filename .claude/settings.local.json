@@ -24,7 +24,10 @@
       "Bash(NODE_OPTIONS=\"\" npm run build:*)",
       "Bash(npx --package typescript tsc:*)",
       "Bash(NODE_OPTIONS=\"\" node ./node_modules/typescript/bin/tsc:*)",
-      "Bash(NODE_OPTIONS=\"\" node:*)"
+      "Bash(NODE_OPTIONS=\"\" node:*)",
+      "Bash(npx --no-install tsc:*)",
+      "Bash(ls:*)",
+      "Bash(node \"a:/Coding/MtgMakeDeckForMe/node_modules/typescript/bin/tsc\":*)"
     ]
   }
 }

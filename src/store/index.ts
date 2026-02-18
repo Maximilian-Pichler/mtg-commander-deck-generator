@@ -65,6 +65,7 @@ const defaultCustomization: Customization = {
   gameChangerLimit: 'unlimited' as const,
   bracketLevel: 'all' as const,
   maxRarity: null,
+  tinyLeaders: false,
 };
 
 export const useStore = create<AppState>((set) => ({
@@ -197,12 +198,8 @@ export const useStore = create<AppState>((set) => ({
     themesLoading: false,
     themesError: null,
     themeSource: 'local',
-    // Keep banned cards and must-include cards from localStorage on reset
-    customization: {
-      ...defaultCustomization,
-      bannedCards: state.customization.bannedCards,
-      mustIncludeCards: state.customization.mustIncludeCards,
-    },
+    // Preserve all customization settings when switching commanders
+    customization: state.customization,
     generatedDeck: null,
     isLoading: false,
     loadingMessage: '',

@@ -268,6 +268,7 @@ export interface Customization {
   gameChangerLimit: GameChangerLimit; // How many game changer cards to allow
   bracketLevel: BracketLevel; // EDHREC bracket level for power level filtering
   maxRarity: MaxRarity; // Max card rarity, null = no limit
+  tinyLeaders: boolean; // Restrict all non-land cards to CMC <= 3
 }
 
 // Store state

@@ -85,13 +85,13 @@ const TYPE_ORDER: CardType[] = ['Commander', 'Planeswalker', 'Creature', 'Artifa
 function getCardType(card: ScryfallCard): CardType {
   const typeLine = card.type_line?.toLowerCase() || '';
 
+  if (typeLine.includes('land')) return 'Land';
   if (typeLine.includes('planeswalker')) return 'Planeswalker';
   if (typeLine.includes('creature')) return 'Creature';
   if (typeLine.includes('instant')) return 'Instant';
   if (typeLine.includes('sorcery')) return 'Sorcery';
   if (typeLine.includes('artifact')) return 'Artifact';
   if (typeLine.includes('enchantment')) return 'Enchantment';
-  if (typeLine.includes('land')) return 'Land';
 
   return 'Artifact'; // Default fallback
 }

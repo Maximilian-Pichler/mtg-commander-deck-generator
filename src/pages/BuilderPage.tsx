@@ -522,6 +522,7 @@ export function BuilderPage() {
                         gameChangerLimit: 'unlimited',
                         bracketLevel: 'all',
                         maxRarity: null,
+                        tinyLeaders: false,
                         bannedCards,
                         mustIncludeCards,
                       });

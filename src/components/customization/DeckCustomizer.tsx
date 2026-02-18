@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { useStore } from '@/store';
-import type { DeckFormat } from '@/types';
+import type { DeckFormat, BudgetOption } from '@/types';
 import { DECK_FORMAT_CONFIGS } from '@/lib/constants/archetypes';
 import { BannedCards } from './BannedCards';
 import { MustIncludeCards } from './MustIncludeCards';
@@ -204,9 +204,10 @@ export function DeckCustomizer() {
         >
           <span className="font-medium flex items-center gap-2">
             Advanced Options
-            {!advancedOpen && (customization.maxCardPrice !== null || customization.mustIncludeCards.length > 0 || customization.bannedCards.length > 0) && (
+            {!advancedOpen && (customization.budgetOption !== 'any' || customization.maxCardPrice !== null || customization.mustIncludeCards.length > 0 || customization.bannedCards.length > 0) && (
               <span className="text-[10px] font-normal text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full">
                 {[
+                  customization.budgetOption !== 'any' ? customization.budgetOption : null,
                   customization.maxCardPrice !== null ? `$${customization.maxCardPrice}` : null,
                   customization.mustIncludeCards.length > 0 ? `${customization.mustIncludeCards.length} included` : null,
                   customization.bannedCards.length > 0 ? `${customization.bannedCards.length} excluded` : null,
@@ -227,6 +228,31 @@ export function DeckCustomizer() {
 
         {advancedOpen && (
           <div className="mt-3 space-y-4">
+            {/* EDHREC Card Pool */}
+            <div>
+              <label className="text-sm font-medium mb-2 block">EDHREC Card Pool</label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: 'any' as BudgetOption, label: 'Any', description: 'All cards' },
+                  { value: 'budget' as BudgetOption, label: 'Budget', description: 'Cheaper picks' },
+                  { value: 'expensive' as BudgetOption, label: 'Expensive', description: 'Premium picks' },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => updateCustomization({ budgetOption: option.value })}
+                    className={`p-2 rounded-lg border text-center transition-colors ${
+                      customization.budgetOption === option.value
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="font-medium text-xs">{option.label}</div>
+                    <div className="text-[10px] text-muted-foreground">{option.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Max Card Price */}
             <div>
               <div className="flex items-center justify-between mb-2">

@@ -61,6 +61,7 @@ const defaultCustomization: Customization = {
   bannedCards: loadBannedCards(), // Load from localStorage
   mustIncludeCards: loadMustIncludeCards(), // Load from localStorage
   maxCardPrice: null, // No limit by default
+  budgetOption: 'any' as const, // Default to normal card pool
 };
 
 export const useStore = create<AppState>((set) => ({

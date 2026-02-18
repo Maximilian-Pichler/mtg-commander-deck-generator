@@ -771,6 +771,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
   const usedNames = new Set<string>();
   const bannedCards = new Set(customization.bannedCards || []);
   const maxCardPrice = customization.maxCardPrice ?? null;
+  const budgetOption = customization.budgetOption !== 'any' ? customization.budgetOption : undefined;
 
   // Log banned cards if any
   if (bannedCards.size > 0) {
@@ -883,8 +884,8 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     try {
       const themeDataPromises = selectedThemesWithSlugs.map(theme =>
         partnerCommander
-          ? fetchPartnerThemeData(commander.name, partnerCommander.name, theme.slug!)
-          : fetchCommanderThemeData(commander.name, theme.slug!)
+          ? fetchPartnerThemeData(commander.name, partnerCommander.name, theme.slug!, budgetOption)
+          : fetchCommanderThemeData(commander.name, theme.slug!, budgetOption)
       );
       const themeDataResults = await Promise.all(themeDataPromises);
 
@@ -906,8 +907,8 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       // Fall back to base commander data
       try {
         edhrecData = partnerCommander
-          ? await fetchPartnerCommanderData(commander.name, partnerCommander.name)
-          : await fetchCommanderData(commander.name);
+          ? await fetchPartnerCommanderData(commander.name, partnerCommander.name, budgetOption)
+          : await fetchCommanderData(commander.name, budgetOption);
         onProgress?.('Consulting ancient scrolls...', 12);
       } catch {
         onProgress?.('The oracle is silent... searching the multiverse...', 12);
@@ -918,8 +919,8 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     onProgress?.('Consulting the wisdom of EDHREC...', 8);
     try {
       edhrecData = partnerCommander
-        ? await fetchPartnerCommanderData(commander.name, partnerCommander.name)
-        : await fetchCommanderData(commander.name);
+        ? await fetchPartnerCommanderData(commander.name, partnerCommander.name, budgetOption)
+        : await fetchCommanderData(commander.name, budgetOption);
       onProgress?.('Ancient knowledge acquired!', 12);
     } catch (error) {
       console.warn('Failed to fetch EDHREC data, falling back to Scryfall:', error);

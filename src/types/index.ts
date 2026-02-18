@@ -244,6 +244,9 @@ export interface DeckFormatConfig {
   allowMultipleCopies: boolean;
 }
 
+// EDHREC budget filter
+export type BudgetOption = 'any' | 'budget' | 'expensive';
+
 // User customization
 export interface Customization {
   deckFormat: DeckFormat;
@@ -252,6 +255,7 @@ export interface Customization {
   bannedCards: string[]; // Card names to exclude from deck generation
   mustIncludeCards: string[]; // Card names to force-include in deck generation (first priority)
   maxCardPrice: number | null; // Max USD price per card, null = no limit
+  budgetOption: BudgetOption; // EDHREC card pool: any (normal), budget, or expensive
 }
 
 // Store state

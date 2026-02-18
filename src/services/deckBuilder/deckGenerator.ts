@@ -13,7 +13,7 @@ import type {
   EDHRECCommanderStats,
   MaxRarity,
 } from '@/types';
-import { searchCards, getCardByName, getCardsByNames, prefetchBasicLands, getCachedCard, getGameChangerNames } from '@/services/scryfall/client';
+import { searchCards, getCardByName, getCardsByNames, prefetchBasicLands, getCachedCard, getGameChangerNames, getCardPrice } from '@/services/scryfall/client';
 import { fetchCommanderData, fetchCommanderThemeData, fetchPartnerCommanderData, fetchPartnerThemeData } from '@/services/edhrec/client';
 import {
   calculateTypeTargets,
@@ -162,7 +162,7 @@ function calculateTargetCounts(
 // Cards with no USD price are treated as exceeding the limit when a budget is active
 function exceedsMaxPrice(card: ScryfallCard, maxPrice: number | null): boolean {
   if (maxPrice === null) return false;
-  const priceStr = card.prices?.usd;
+  const priceStr = getCardPrice(card);
   if (!priceStr) return true; // No price data — skip when budget is set
   const price = parseFloat(priceStr);
   return isNaN(price) || price > maxPrice;

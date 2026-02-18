@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
-import { getCardImageUrl, isDoubleFacedCard, getCardBackFaceUrl } from '@/services/scryfall/client';
+import { getCardImageUrl, isDoubleFacedCard, getCardBackFaceUrl, getCardPrice } from '@/services/scryfall/client';
 import { getDeckFormatConfig } from '@/lib/constants/archetypes';
 import type { ScryfallCard } from '@/types';
 import {
@@ -97,7 +97,7 @@ function getCardType(card: ScryfallCard): CardType {
 }
 
 // Format price
-function formatPrice(price: string | undefined): string {
+function formatPrice(price: string | null | undefined): string {
   if (!price) return '-';
   const num = parseFloat(price);
   if (isNaN(num)) return '-';
@@ -114,7 +114,7 @@ interface CardRowProps {
 }
 
 function CardRow({ card, quantity, onPreview, onHover, dimmed }: CardRowProps) {
-  const price = formatPrice(card.prices?.usd);
+  const price = formatPrice(getCardPrice(card));
   const isDfc = isDoubleFacedCard(card);
 
   return (
@@ -171,7 +171,7 @@ function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds }: Ca
 
   const totalCards = cards.reduce((sum, c) => sum + c.quantity, 0);
   const totalPrice = cards.reduce((sum, c) => {
-    const price = parseFloat(c.card.prices?.usd || '0');
+    const price = parseFloat(getCardPrice(c.card) || '0');
     return sum + (isNaN(price) ? 0 : price * c.quantity);
   }, 0);
 
@@ -304,9 +304,38 @@ function CardPreviewModal({ card, onClose }: CardPreviewModalProps) {
         <div className="mt-4 text-center">
           <h3 className="text-white font-bold text-lg">{faceName}</h3>
           <p className="text-white/70 text-sm">{faceType}</p>
-          {card.prices?.usd && (
-            <p className="text-white/50 text-xs mt-1">${card.prices.usd}</p>
+          {getCardPrice(card) && (
+            <p className="text-white/50 text-xs mt-1">${getCardPrice(card)}</p>
           )}
+          <div className="flex items-center justify-center gap-3 mt-3">
+            <a
+              href={`https://scryfall.com/search?q=!%22${encodeURIComponent(card.name)}%22`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => console.log('[CardPreview]', card.name, card)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white text-xs font-medium transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              Scryfall
+            </a>
+            <a
+              href={`https://edhrec.com/cards/${card.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => console.log('[CardPreview]', card.name, card)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white text-xs font-medium transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              EDHREC
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -823,8 +852,8 @@ export function DeckDisplay() {
         if (sortBy === 'name') return a.card.name.localeCompare(b.card.name);
         if (sortBy === 'cmc') return a.card.cmc - b.card.cmc;
         if (sortBy === 'price') {
-          const priceA = parseFloat(a.card.prices?.usd || '0');
-          const priceB = parseFloat(b.card.prices?.usd || '0');
+          const priceA = parseFloat(getCardPrice(a.card) || '0');
+          const priceB = parseFloat(getCardPrice(b.card) || '0');
           return priceB - priceA;
         }
         return 0;
@@ -879,7 +908,7 @@ export function DeckDisplay() {
   const allGroupedCards = Object.values(groupedCards).flat();
   const totalCards = allGroupedCards.reduce((sum, c) => sum + c.quantity, 0);
   const totalPrice = allGroupedCards.reduce((sum, c) => {
-    const price = parseFloat(c.card.prices?.usd || '0');
+    const price = parseFloat(getCardPrice(c.card) || '0');
     return sum + (isNaN(price) ? 0 : price * c.quantity);
   }, 0);
 

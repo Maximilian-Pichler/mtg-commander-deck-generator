@@ -3,7 +3,7 @@ import { getPartnerType, getPartnerWithName } from '@/lib/partnerUtils';
 
 const BASE_URL = import.meta.env.DEV ? '/scryfall-api' : 'https://api.scryfall.com';
 const MIN_REQUEST_DELAY = 100; // 100ms between requests (Scryfall allows 10/sec)
-const SEQUENTIAL_BATCH_SIZE = 5; // Fetch cards sequentially in smaller batches
+const COLLECTION_BATCH_SIZE = 75; // Scryfall /cards/collection max per request
 
 // In-memory cache for fetched cards
 const cardCache = new Map<string, ScryfallCard>();
@@ -143,8 +143,8 @@ async function fetchCardByNameThrottled(name: string, retries = 2): Promise<Scry
     if (response.ok) {
       const searchResult = await response.json() as ScryfallSearchResponse;
       if (searchResult.data.length > 0) {
-        // Pick the first printing that has a USD price; fall back to first result
-        const card = searchResult.data.find(c => c.prices?.usd) || searchResult.data[0];
+        // Pick the first printing that has any price; fall back to first result
+        const card = searchResult.data.find(c => getCardPrice(c)) || searchResult.data[0];
         cardCache.set(name, card);
         // Also cache under Scryfall's canonical name if different
         if (card.name !== name) cardCache.set(card.name, card);
@@ -179,8 +179,8 @@ async function fetchCardByNameThrottled(name: string, retries = 2): Promise<Scry
 }
 
 /**
- * Batch fetch multiple cards by name with proper rate limiting.
- * Uses sequential requests with proper spacing to avoid 429 errors.
+ * Batch fetch multiple cards by name using Scryfall's /cards/collection endpoint.
+ * Fetches up to 75 cards per request, drastically reducing API calls vs individual lookups.
  *
  * @param names Array of card names to fetch
  * @returns Map of card name -> ScryfallCard for found cards
@@ -207,29 +207,74 @@ export async function getCardsByNames(
   // If all cards were cached, return early
   if (uncachedNames.length === 0) return result;
 
-  console.log(`[Scryfall] Fetching ${uncachedNames.length} cards sequentially with rate limiting...`);
+  console.log(`[Scryfall] Fetching ${uncachedNames.length} cards via /cards/collection...`);
 
-  // Fetch cards sequentially with rate limiting to avoid 429 errors
-  // Process in small batches for progress logging
-  let fetched = 0;
-  for (let i = 0; i < uncachedNames.length; i += SEQUENTIAL_BATCH_SIZE) {
-    const batch = uncachedNames.slice(i, i + SEQUENTIAL_BATCH_SIZE);
+  // Use Scryfall's /cards/collection endpoint (up to 75 per request)
+  for (let i = 0; i < uncachedNames.length; i += COLLECTION_BATCH_SIZE) {
+    const batch = uncachedNames.slice(i, i + COLLECTION_BATCH_SIZE);
+    const identifiers = batch.map(name => ({ name }));
 
-    // Fetch each card in the batch sequentially (rate limiter handles timing)
-    for (const name of batch) {
+    await rateLimiter.acquire();
+
+    try {
+      const response = await fetch(`${BASE_URL}/cards/collection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ identifiers }),
+      });
+
+      if (response.ok) {
+        const data = await response.json() as { data: ScryfallCard[]; not_found: Array<{ name?: string }> };
+        for (const card of data.data) {
+          result.set(card.name, card);
+          cardCache.set(card.name, card);
+        }
+        if (data.not_found.length > 0) {
+          console.warn(`[Scryfall] ${data.not_found.length} cards not found in collection batch`);
+        }
+      } else if (response.status === 429) {
+        // Rate limited - back off and retry this batch
+        console.warn('[Scryfall] Rate limited on collection fetch, backing off...');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        i -= COLLECTION_BATCH_SIZE; // retry this batch
+        continue;
+      }
+    } catch (err) {
+      console.warn('[Scryfall] Collection batch failed:', err);
+    }
+
+    onProgress?.(Math.min(i + COLLECTION_BATCH_SIZE, uncachedNames.length), uncachedNames.length);
+  }
+
+  // Re-fetch cards that came back with no price (e.g. unreleased reprints)
+  // fetchCardByNameThrottled searches across all printings sorted by price
+  const noPriceNames = uncachedNames.filter(name => {
+    const card = result.get(name);
+    return card && !getCardPrice(card);
+  });
+  if (noPriceNames.length > 0) {
+    console.log(`[Scryfall] Re-fetching ${noPriceNames.length} cards with no price for older printings...`);
+    for (const name of noPriceNames) {
+      const card = await fetchCardByNameThrottled(name);
+      if (card && getCardPrice(card)) {
+        result.set(name, card);
+        cardCache.set(name, card);
+      }
+    }
+  }
+
+  // For any names not found via collection, try individual fallback
+  const notFound = uncachedNames.filter(name => !result.has(name));
+  if (notFound.length > 0) {
+    console.log(`[Scryfall] Retrying ${notFound.length} not-found cards individually...`);
+    for (const name of notFound) {
       const card = await fetchCardByNameThrottled(name);
       if (card) {
         result.set(name, card);
       }
-      fetched++;
-    }
-
-    // Report progress
-    onProgress?.(fetched, uncachedNames.length);
-
-    // Log progress for large fetches
-    if (uncachedNames.length > 10 && i > 0 && i % 10 === 0) {
-      console.log(`[Scryfall] Progress: ${Math.min(i + SEQUENTIAL_BATCH_SIZE, uncachedNames.length)}/${uncachedNames.length} cards`);
     }
   }
 
@@ -324,6 +369,16 @@ export function getCardImageUrl(
 
   // Fallback placeholder
   return 'https://cards.scryfall.io/normal/front/0/0/00000000-0000-0000-0000-000000000000.jpg';
+}
+
+/**
+ * Get the best available USD price for a card.
+ * Falls back through: usd → usd_foil → usd_etched → eur → eur_foil
+ * Returns the price string or null if no price is available.
+ */
+export function getCardPrice(card: ScryfallCard): string | null {
+  const p = card.prices;
+  return p?.usd || p?.usd_foil || p?.usd_etched || p?.eur || p?.eur_foil || null;
 }
 
 // Check if a card is double-faced (has separate face images)

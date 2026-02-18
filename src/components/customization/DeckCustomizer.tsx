@@ -11,7 +11,8 @@ export function DeckCustomizer() {
   const { customization, updateCustomization, commander, partnerCommander } = useStore();
   const [editingLands, setEditingLands] = useState(false);
   const [landInputValue, setLandInputValue] = useState('');
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  const [cardListsOpen, setCardListsOpen] = useState(false);
   const [editingPrice, setEditingPrice] = useState(false);
   const [priceInputValue, setPriceInputValue] = useState('');
   const priceInputRef = useRef<HTMLInputElement>(null);
@@ -196,27 +197,29 @@ export function DeckCustomizer() {
         </div>
       </div>
 
-      {/* Advanced Options */}
-      <div className="pt-2 border-t border-border/50">
+      {/* Budget Options Accordion */}
+      <div className={budgetOpen ? 'pt-2 border-t border-border/50' : ''}>
         <button
-          onClick={() => setAdvancedOpen(!advancedOpen)}
+          onClick={() => setBudgetOpen(!budgetOpen)}
           className="flex items-center justify-between w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
         >
           <span className="font-medium flex items-center gap-2">
-            Advanced Options
-            {!advancedOpen && (customization.budgetOption !== 'any' || customization.maxCardPrice !== null || customization.mustIncludeCards.length > 0 || customization.bannedCards.length > 0) && (
-              <span className="text-[10px] font-normal text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+            Budget Options
+            {!budgetOpen && (customization.budgetOption !== 'any' || customization.maxCardPrice !== null) && (
+              <span className="text-[10px] font-normal text-primary bg-primary/20 px-1.5 py-0.5 rounded-full">
                 {[
                   customization.budgetOption !== 'any' ? customization.budgetOption : null,
                   customization.maxCardPrice !== null ? `$${customization.maxCardPrice}` : null,
-                  customization.mustIncludeCards.length > 0 ? `${customization.mustIncludeCards.length} included` : null,
-                  customization.bannedCards.length > 0 ? `${customization.bannedCards.length} excluded` : null,
                 ].filter(Boolean).join(' · ')}
               </span>
             )}
           </span>
           <svg
-            className={`w-4 h-4 transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 transition-transform ${budgetOpen ? 'rotate-180' : ''}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -226,7 +229,7 @@ export function DeckCustomizer() {
           </svg>
         </button>
 
-        {advancedOpen && (
+        {budgetOpen && (
           <div className="mt-3 space-y-4">
             {/* EDHREC Card Pool */}
             <div>
@@ -256,13 +259,7 @@ export function DeckCustomizer() {
             {/* Max Card Price */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="1" x2="12" y2="23" />
-                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                  </svg>
-                  Max Card Price
-                </label>
+                <label className="text-sm font-medium">Max Card Price</label>
                 <span className="text-sm font-bold">
                   {customization.maxCardPrice === null ? 'No limit' : `$${customization.maxCardPrice}`}
                 </span>
@@ -314,7 +311,48 @@ export function DeckCustomizer() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+      </div>
 
+      {/* Card Lists Accordion */}
+      <div className={cardListsOpen ? 'pt-2 border-t border-border/50' : ''}>
+        <button
+          onClick={() => setCardListsOpen(!cardListsOpen)}
+          className="flex items-center justify-between w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+        >
+          <span className="font-medium flex items-center gap-2">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+            Card Lists
+            {!cardListsOpen && (customization.mustIncludeCards.length > 0 || customization.bannedCards.length > 0) && (
+              <span className="text-[10px] font-normal text-primary bg-primary/20 px-1.5 py-0.5 rounded-full">
+                {[
+                  customization.mustIncludeCards.length > 0 ? `${customization.mustIncludeCards.length} included` : null,
+                  customization.bannedCards.length > 0 ? `${customization.bannedCards.length} excluded` : null,
+                ].filter(Boolean).join(' · ')}
+              </span>
+            )}
+          </span>
+          <svg
+            className={`w-4 h-4 transition-transform ${cardListsOpen ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {cardListsOpen && (
+          <div className="mt-3 space-y-4">
             {/* Must Include Cards */}
             <MustIncludeCards />
 

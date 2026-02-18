@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useStore } from '@/store';
 import { searchCards, getCardImageUrl } from '@/services/scryfall/client';
 import type { ScryfallCard } from '@/types';
-import { Search, Loader2, X, Ban, Upload, Trash2 } from 'lucide-react';
+import { Search, Loader2, X, Upload, Trash2 } from 'lucide-react';
 
 export function BannedCards() {
   const [query, setQuery] = useState('');
@@ -103,7 +103,6 @@ export function BannedCards() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Ban className="w-4 h-4 text-muted-foreground" />
           <label className="text-sm font-medium">Excluded Cards</label>
           {bannedCards.length > 0 && (
             <span className="text-xs text-muted-foreground">

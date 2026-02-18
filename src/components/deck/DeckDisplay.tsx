@@ -15,6 +15,67 @@ import {
 } from 'lucide-react';
 import { CardTypeIcon, ManaCost } from '@/components/ui/mtg-icons';
 
+// Stats filter for interactive highlighting
+type StatsFilter =
+  | { type: 'cmc'; value: number }
+  | { type: 'color'; value: string }
+  | { type: 'manaProduction'; value: string }
+  | null;
+
+// Check if a card matches the current stats filter
+function cardMatchesFilter(card: ScryfallCard, filter: StatsFilter): boolean {
+  if (!filter) return true;
+
+  switch (filter.type) {
+    case 'cmc': {
+      if (card.type_line?.toLowerCase().includes('land')) return false;
+      const cardCmc = Math.min(Math.floor(card.cmc), 7);
+      return cardCmc === filter.value;
+    }
+    case 'color': {
+      const manaCost = card.mana_cost || '';
+      const symbols = manaCost.match(/\{[^}]+\}/g) || [];
+      for (const symbol of symbols) {
+        const clean = symbol.replace(/[{}]/g, '');
+        if (clean === filter.value) return true;
+        if (clean.includes('/')) {
+          const parts = clean.split('/');
+          if (parts.includes(filter.value)) return true;
+        }
+      }
+      if (filter.value === 'C') {
+        const hasColorPip = symbols.some(s => {
+          const c = s.replace(/[{}]/g, '');
+          return ['W','U','B','R','G'].includes(c) || (c.includes('/') && c.split('/').some(p => ['W','U','B','R','G'].includes(p)));
+        });
+        return !hasColorPip && symbols.length > 0;
+      }
+      return false;
+    }
+    case 'manaProduction': {
+      const typeLine = card.type_line?.toLowerCase() || '';
+      if (!typeLine.includes('land')) return false;
+      const producedMana = card.produced_mana || [];
+      if (producedMana.includes(filter.value)) return true;
+      if (producedMana.length === 0) {
+        const oracleText = card.oracle_text?.toLowerCase() || '';
+        const checks: Record<string, () => boolean> = {
+          W: () => typeLine.includes('plains') || oracleText.includes('add {w}'),
+          U: () => typeLine.includes('island') || oracleText.includes('add {u}'),
+          B: () => typeLine.includes('swamp') || oracleText.includes('add {b}'),
+          R: () => typeLine.includes('mountain') || oracleText.includes('add {r}'),
+          G: () => typeLine.includes('forest') || oracleText.includes('add {g}'),
+          C: () => oracleText.includes('add {c}'),
+        };
+        return checks[filter.value]?.() ?? false;
+      }
+      return false;
+    }
+    default:
+      return true;
+  }
+}
+
 // Card type categories for Moxfield-style grouping
 type CardType = 'Commander' | 'Creature' | 'Planeswalker' | 'Instant' | 'Sorcery' | 'Artifact' | 'Enchantment' | 'Land';
 
@@ -49,14 +110,17 @@ interface CardRowProps {
   quantity: number;
   onPreview: (card: ScryfallCard) => void;
   onHover: (card: ScryfallCard | null, e?: React.MouseEvent) => void;
+  dimmed?: boolean;
 }
 
-function CardRow({ card, quantity, onPreview, onHover }: CardRowProps) {
+function CardRow({ card, quantity, onPreview, onHover, dimmed }: CardRowProps) {
   const price = formatPrice(card.prices?.usd);
 
   return (
     <button
-      className="w-full text-left px-2 py-1 hover:bg-accent/50 rounded text-sm flex items-center gap-2 group transition-colors"
+      className={`w-full text-left px-2 py-1 rounded text-sm flex items-center gap-2 group transition-all duration-200 ${
+        dimmed ? 'opacity-30' : 'hover:bg-accent/50'
+      }`}
       onClick={() => onPreview(card)}
       onMouseEnter={(e) => onHover(card, e)}
       onMouseLeave={() => onHover(null)}
@@ -85,9 +149,10 @@ interface CategoryColumnProps {
   cards: Array<{ card: ScryfallCard; quantity: number }>;
   onPreview: (card: ScryfallCard) => void;
   onHover: (card: ScryfallCard | null, e?: React.MouseEvent) => void;
+  matchingCardIds: Set<string> | null;
 }
 
-function CategoryColumn({ type, cards, onPreview, onHover }: CategoryColumnProps) {
+function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds }: CategoryColumnProps) {
   if (cards.length === 0) return null;
 
   const totalCards = cards.reduce((sum, c) => sum + c.quantity, 0);
@@ -122,6 +187,7 @@ function CategoryColumn({ type, cards, onPreview, onHover }: CategoryColumnProps
             quantity={quantity}
             onPreview={onPreview}
             onHover={onHover}
+            dimmed={matchingCardIds !== null && !matchingCardIds.has(card.id)}
           />
         ))}
       </div>
@@ -271,7 +337,12 @@ const MANA_COLORS: Record<string, { name: string; color: string; bgColor: string
 };
 
 // SVG Pie Chart Component
-function PieChart({ data, size = 120 }: { data: Array<{ color: string; value: number; label: string }>; size?: number }) {
+function PieChart({ data, size = 120, activeColorKey, onSegmentClick }: {
+  data: Array<{ color: string; value: number; label: string; colorKey: string }>;
+  size?: number;
+  activeColorKey?: string | null;
+  onSegmentClick?: (colorKey: string) => void;
+}) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
   if (total === 0) return null;
 
@@ -312,9 +383,17 @@ function PieChart({ data, size = 120 }: { data: Array<{ color: string; value: nu
   });
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="cursor-pointer">
       {segments.map((seg, i) => (
-        <path key={i} d={seg.path} fill={seg.color} className="transition-opacity hover:opacity-80" />
+        <path
+          key={i}
+          d={seg.path}
+          fill={seg.color}
+          className={`transition-opacity ${
+            activeColorKey && seg.colorKey !== activeColorKey ? 'opacity-30' : 'hover:opacity-80'
+          }`}
+          onClick={() => onSegmentClick?.(seg.colorKey)}
+        />
       ))}
     </svg>
   );
@@ -389,7 +468,12 @@ function calculateManaProduction(cards: ScryfallCard[]): Record<string, number> 
 }
 
 // Stats sidebar
-function DeckStats() {
+interface DeckStatsProps {
+  activeFilter: StatsFilter;
+  onFilterChange: (filter: StatsFilter) => void;
+}
+
+function DeckStats({ activeFilter, onFilterChange }: DeckStatsProps) {
   const { generatedDeck, colorIdentity } = useStore();
   if (!generatedDeck) return null;
 
@@ -416,11 +500,27 @@ function DeckStats() {
       color: MANA_COLORS[color].color,
       value,
       label: MANA_COLORS[color].name,
+      colorKey: color,
     }));
 
   return (
     <div className="bg-card/50 rounded-lg border border-border/50 p-4 space-y-5">
-      <h3 className="font-medium text-sm uppercase tracking-wide text-muted-foreground">Statistics</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-sm uppercase tracking-wide text-muted-foreground">Statistics</h3>
+        {activeFilter && (
+          <button
+            onClick={() => onFilterChange(activeFilter)}
+            className="flex items-center gap-1.5 text-xs text-primary bg-primary/10 rounded-full px-2.5 py-0.5 hover:bg-primary/20 transition-colors"
+          >
+            <X className="w-3 h-3" />
+            <span>
+              {activeFilter.type === 'cmc' && `CMC ${activeFilter.value === 7 ? '7+' : activeFilter.value}`}
+              {activeFilter.type === 'color' && `${MANA_COLORS[activeFilter.value]?.name} pips`}
+              {activeFilter.type === 'manaProduction' && `${MANA_COLORS[activeFilter.value]?.name} sources`}
+            </span>
+          </button>
+        )}
+      </div>
 
       {/* Basic Stats */}
       <div className="grid grid-cols-2 gap-3">
@@ -441,18 +541,30 @@ function DeckStats() {
           {[0, 1, 2, 3, 4, 5, 6, 7].map((cmc) => {
             const count = stats.manaCurve[cmc] || 0;
             const height = (count / maxCurveCount) * 100;
+            const isActive = activeFilter?.type === 'cmc' && activeFilter?.value === cmc;
             return (
-              <div key={cmc} className="flex-1 flex flex-col items-center">
+              <button
+                key={cmc}
+                className={`flex-1 flex flex-col items-center ${
+                  count === 0 ? 'pointer-events-none' : 'cursor-pointer group'
+                }`}
+                onClick={() => count > 0 && onFilterChange({ type: 'cmc', value: cmc })}
+                title={`${cmc === 7 ? '7+' : cmc} CMC: ${count} cards`}
+              >
                 <div className="w-full flex flex-col items-center justify-end h-12">
                   <div
-                    className="w-full bg-primary/70 rounded-t"
+                    className={`w-full rounded-t transition-colors ${
+                      isActive ? 'bg-primary ring-1 ring-primary/50' : 'bg-primary/70 group-hover:bg-primary/90'
+                    }`}
                     style={{ height: `${height}%`, minHeight: count > 0 ? '4px' : '0' }}
                   />
                 </div>
-                <span className="text-[10px] text-muted-foreground mt-1">
+                <span className={`text-[10px] mt-1 ${
+                  isActive ? 'text-primary font-bold' : 'text-muted-foreground'
+                }`}>
                   {cmc === 7 ? '7+' : cmc}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -463,19 +575,33 @@ function DeckStats() {
         <div>
           <div className="text-xs text-muted-foreground mb-3">Color Distribution</div>
           <div className="flex items-center gap-4">
-            <PieChart data={pieData} size={80} />
-            <div className="flex-1 space-y-1.5">
+            <PieChart
+              data={pieData}
+              size={80}
+              activeColorKey={activeFilter?.type === 'color' ? activeFilter.value : null}
+              onSegmentClick={(colorKey) => onFilterChange({ type: 'color', value: colorKey })}
+            />
+            <div className="flex-1 space-y-0.5">
               {Object.entries(manaPips)
                 .filter(([, value]) => value > 0)
                 .sort(([, a], [, b]) => b - a)
                 .map(([color, value]) => {
                   const percent = ((value / totalPips) * 100).toFixed(0);
+                  const isActive = activeFilter?.type === 'color' && activeFilter?.value === color;
                   return (
-                    <div key={color} className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${MANA_COLORS[color].bgColor}`} />
-                      <span className="text-xs flex-1">{MANA_COLORS[color].name}</span>
-                      <span className="text-xs font-medium">{percent}%</span>
-                    </div>
+                    <button
+                      key={color}
+                      className={`flex items-center gap-2 w-full rounded px-1 py-0.5 transition-colors cursor-pointer ${
+                        isActive ? 'bg-accent/50' : 'hover:bg-accent/30'
+                      }`}
+                      onClick={() => onFilterChange({ type: 'color', value: color })}
+                    >
+                      <div className={`w-3 h-3 rounded-full ${MANA_COLORS[color].bgColor} ${
+                        isActive ? 'ring-2 ring-primary' : ''
+                      }`} />
+                      <span className="text-xs flex-1 text-left">{MANA_COLORS[color].name}</span>
+                      <span className={`text-xs font-medium ${isActive ? 'text-primary' : ''}`}>{percent}%</span>
+                    </button>
                   );
                 })}
             </div>
@@ -487,28 +613,37 @@ function DeckStats() {
       {totalProduction > 0 && (
         <div>
           <div className="text-xs text-muted-foreground mb-2">Mana Production</div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {Object.entries(manaProduction)
               .filter(([color, value]) => value > 0 && (color === 'C' || colorIdentity.includes(color)))
               .sort(([, a], [, b]) => b - a)
               .map(([color, value]) => {
                 const percent = (value / totalProduction) * 100;
+                const isActive = activeFilter?.type === 'manaProduction' && activeFilter?.value === color;
                 return (
-                  <div key={color} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
+                  <button
+                    key={color}
+                    className={`w-full text-left rounded px-1 py-1 transition-colors cursor-pointer ${
+                      isActive ? 'bg-accent/50' : 'hover:bg-accent/30'
+                    }`}
+                    onClick={() => onFilterChange({ type: 'manaProduction', value: color })}
+                  >
+                    <div className="flex items-center justify-between text-xs mb-1">
                       <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full ${MANA_COLORS[color].bgColor}`} />
+                        <div className={`w-2.5 h-2.5 rounded-full ${MANA_COLORS[color].bgColor} ${
+                          isActive ? 'ring-2 ring-primary' : ''
+                        }`} />
                         <span>{MANA_COLORS[color].name}</span>
                       </div>
                       <span className="text-muted-foreground">{value} sources ({percent.toFixed(0)}%)</span>
                     </div>
                     <div className="h-1.5 bg-accent/50 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${MANA_COLORS[color].bgColor} opacity-80`}
+                        className={`h-full rounded-full ${MANA_COLORS[color].bgColor} ${isActive ? 'opacity-100' : 'opacity-80'}`}
                         style={{ width: `${percent}%` }}
                       />
                     </div>
-                  </div>
+                  </button>
                 );
               })}
           </div>
@@ -545,6 +680,18 @@ export function DeckDisplay() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortBy, setSortBy] = useState<'name' | 'cmc' | 'price'>('name');
+  const [statsFilter, setStatsFilter] = useState<StatsFilter>(null);
+
+  const handleStatsFilterChange = useCallback((newFilter: StatsFilter) => {
+    setStatsFilter(prev => {
+      if (prev && newFilter &&
+          prev.type === newFilter.type &&
+          prev.value === newFilter.value) {
+        return null;
+      }
+      return newFilter;
+    });
+  }, []);
 
   // Group cards by type and count duplicates
   const groupedCards = useMemo((): GroupedCards => {
@@ -617,6 +764,19 @@ export function DeckDisplay() {
 
     return result;
   }, [generatedDeck, commander, sortBy, formatConfig.hasCommander]);
+
+  // Build set of card IDs matching the active stats filter
+  const matchingCardIds = useMemo(() => {
+    if (!statsFilter) return null;
+    const allGrouped = Object.values(groupedCards).flat();
+    const ids = new Set<string>();
+    for (const { card } of allGrouped) {
+      if (cardMatchesFilter(card, statsFilter)) {
+        ids.add(card.id);
+      }
+    }
+    return ids;
+  }, [statsFilter, groupedCards]);
 
   const handleHover = (card: ScryfallCard | null, e?: React.MouseEvent) => {
     if (card && e) {
@@ -692,6 +852,14 @@ export function DeckDisplay() {
           <div className="flex items-center gap-4">
             <div className="text-sm text-muted-foreground">
               {totalCards} cards · ${totalPrice.toFixed(2)}
+              {(customization.budgetOption !== 'any' || customization.maxCardPrice !== null) && (
+                <span className="ml-1 text-xs">
+                  ({[
+                    customization.budgetOption === 'budget' ? 'Budget' : customization.budgetOption === 'expensive' ? 'Expensive' : null,
+                    customization.maxCardPrice !== null ? `<$${customization.maxCardPrice}` : null,
+                  ].filter(Boolean).join(' · ')})
+                </span>
+              )}
               {usedThemes && usedThemes.length > 0 && (
                 <span className="ml-2">
                   · Built with: <span className="text-primary font-medium">{usedThemes.join(', ')}</span>
@@ -707,7 +875,7 @@ export function DeckDisplay() {
 
         {/* Stats - Mobile/Tablet (above deck list) */}
         <div className="xl:hidden mb-6">
-          <DeckStats />
+          <DeckStats activeFilter={statsFilter} onFilterChange={handleStatsFilterChange} />
         </div>
 
         {/* Main Content */}
@@ -723,31 +891,37 @@ export function DeckDisplay() {
                     cards={groupedCards[type] || []}
                     onPreview={setPreviewCard}
                     onHover={handleHover}
+                    matchingCardIds={matchingCardIds}
                   />
                 ))}
               </div>
             ) : (
               <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                 {TYPE_ORDER.flatMap((type) =>
-                  (groupedCards[type] || []).map(({ card, quantity }) => (
-                    <button
-                      key={card.id}
-                      onClick={() => setPreviewCard(card)}
-                      className="relative group"
-                    >
-                      <img
-                        src={getCardImageUrl(card, 'small')}
-                        alt={card.name}
-                        className="w-full rounded transition-transform group-hover:scale-105"
-                        loading="lazy"
-                      />
-                      {quantity > 1 && (
-                        <span className="absolute top-1 right-1 bg-black/80 text-white text-xs px-1.5 rounded">
-                          {quantity}x
-                        </span>
-                      )}
-                    </button>
-                  ))
+                  (groupedCards[type] || []).map(({ card, quantity }) => {
+                    const dimmed = matchingCardIds !== null && !matchingCardIds.has(card.id);
+                    return (
+                      <button
+                        key={card.id}
+                        onClick={() => setPreviewCard(card)}
+                        className={`relative group transition-opacity duration-200 ${
+                          dimmed ? 'opacity-30' : ''
+                        }`}
+                      >
+                        <img
+                          src={getCardImageUrl(card, 'small')}
+                          alt={card.name}
+                          className={`w-full rounded transition-transform ${dimmed ? '' : 'group-hover:scale-105'}`}
+                          loading="lazy"
+                        />
+                        {quantity > 1 && (
+                          <span className="absolute top-1 right-1 bg-black/80 text-white text-xs px-1.5 rounded">
+                            {quantity}x
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             )}
@@ -755,7 +929,7 @@ export function DeckDisplay() {
 
           {/* Stats Sidebar - Desktop only */}
           <div className="hidden xl:block w-64 shrink-0">
-            <DeckStats />
+            <DeckStats activeFilter={statsFilter} onFilterChange={handleStatsFilterChange} />
           </div>
         </div>
       </div>

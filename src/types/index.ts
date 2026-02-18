@@ -247,6 +247,12 @@ export interface DeckFormatConfig {
 // EDHREC budget filter
 export type BudgetOption = 'any' | 'budget' | 'expensive';
 
+// Game changer limit: 'none' = 0, 'unlimited' = no cap, or a specific number
+export type GameChangerLimit = 'none' | 'unlimited' | number;
+
+// EDHREC bracket level (power level tiers)
+export type BracketLevel = 'all' | 1 | 2 | 3 | 4 | 5;
+
 // User customization
 export interface Customization {
   deckFormat: DeckFormat;
@@ -256,6 +262,8 @@ export interface Customization {
   mustIncludeCards: string[]; // Card names to force-include in deck generation (first priority)
   maxCardPrice: number | null; // Max USD price per card, null = no limit
   budgetOption: BudgetOption; // EDHREC card pool: any (normal), budget, or expensive
+  gameChangerLimit: GameChangerLimit; // How many game changer cards to allow
+  bracketLevel: BracketLevel; // EDHREC bracket level for power level filtering
 }
 
 // Store state

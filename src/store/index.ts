@@ -62,6 +62,8 @@ const defaultCustomization: Customization = {
   mustIncludeCards: loadMustIncludeCards(), // Load from localStorage
   maxCardPrice: null, // No limit by default
   budgetOption: 'any' as const, // Default to normal card pool
+  gameChangerLimit: 'unlimited' as const,
+  bracketLevel: 'all' as const,
 };
 
 export const useStore = create<AppState>((set) => ({

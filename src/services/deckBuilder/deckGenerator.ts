@@ -12,7 +12,7 @@ import type {
   EDHRECCommanderData,
   EDHRECCommanderStats,
 } from '@/types';
-import { searchCards, getCardByName, getCardsByNames, prefetchBasicLands, getCachedCard } from '@/services/scryfall/client';
+import { searchCards, getCardByName, getCardsByNames, prefetchBasicLands, getCachedCard, getGameChangerNames } from '@/services/scryfall/client';
 import { fetchCommanderData, fetchCommanderThemeData, fetchPartnerCommanderData, fetchPartnerThemeData } from '@/services/edhrec/client';
 import {
   calculateTypeTargets,
@@ -159,7 +159,9 @@ function pickFromPrefetched(
   usedNames: Set<string>,
   colorIdentity: string[],
   bannedCards: Set<string> = new Set(),
-  maxCardPrice: number | null = null
+  maxCardPrice: number | null = null,
+  maxGameChangers: number = Infinity,
+  gameChangerCount: { value: number } = { value: 0 }
 ): ScryfallCard[] {
   const result: ScryfallCard[] = [];
 
@@ -172,6 +174,9 @@ function pickFromPrefetched(
   for (const edhrecCard of candidates) {
     if (result.length >= count) break;
 
+    // Skip game changers that exceed the limit
+    if (edhrecCard.isGameChanger && gameChangerCount.value >= maxGameChangers) continue;
+
     const scryfallCard = cardMap.get(edhrecCard.name);
     if (!scryfallCard) continue;
 
@@ -182,7 +187,10 @@ function pickFromPrefetched(
 
     if (exceedsMaxPrice(scryfallCard, maxCardPrice)) continue;
 
-    if (edhrecCard.isGameChanger) scryfallCard.isGameChanger = true;
+    if (edhrecCard.isGameChanger) {
+      scryfallCard.isGameChanger = true;
+      gameChangerCount.value++;
+    }
     result.push(scryfallCard);
     usedNames.add(edhrecCard.name);
   }
@@ -233,7 +241,9 @@ function pickFromPrefetchedWithCurve(
   currentCurveCounts: Record<number, number>,
   bannedCards: Set<string> = new Set(),
   expectedType?: string,
-  maxCardPrice: number | null = null
+  maxCardPrice: number | null = null,
+  maxGameChangers: number = Infinity,
+  gameChangerCount: { value: number } = { value: 0 }
 ): ScryfallCard[] {
   const result: ScryfallCard[] = [];
 
@@ -256,6 +266,9 @@ function pickFromPrefetchedWithCurve(
   const processCards = (candidates: EDHRECCard[], requireTypeCheckForUnknown: boolean): void => {
     for (const edhrecCard of candidates) {
       if (result.length >= count) break;
+
+      // Skip game changers that exceed the limit
+      if (edhrecCard.isGameChanger && gameChangerCount.value >= maxGameChangers) continue;
 
       const scryfallCard = cardMap.get(edhrecCard.name);
       if (!scryfallCard) continue;
@@ -287,7 +300,10 @@ function pickFromPrefetchedWithCurve(
         }
       }
 
-      if (edhrecCard.isGameChanger) scryfallCard.isGameChanger = true;
+      if (edhrecCard.isGameChanger) {
+        scryfallCard.isGameChanger = true;
+        gameChangerCount.value++;
+      }
       result.push(scryfallCard);
       usedNames.add(edhrecCard.name);
       currentCurveCounts[cmc] = (currentCurveCounts[cmc] ?? 0) + 1;
@@ -772,6 +788,11 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
   const bannedCards = new Set(customization.bannedCards || []);
   const maxCardPrice = customization.maxCardPrice ?? null;
   const budgetOption = customization.budgetOption !== 'any' ? customization.budgetOption : undefined;
+  const bracketLevel = customization.bracketLevel !== 'all' ? customization.bracketLevel : undefined;
+  const maxGameChangers = customization.gameChangerLimit === 'none' ? 0
+    : customization.gameChangerLimit === 'unlimited' ? Infinity
+    : customization.gameChangerLimit;
+  const gameChangerCount = { value: 0 };
 
   // Log banned cards if any
   if (bannedCards.size > 0) {
@@ -784,9 +805,12 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     usedNames.add(partnerCommander.name);
   }
 
-  // Pre-fetch and cache basic lands for faster generation
+  // Pre-fetch basic lands and game changer list in parallel
   onProgress?.('Shuffling the library...', 5);
-  await prefetchBasicLands();
+  const [, gameChangerNames] = await Promise.all([
+    prefetchBasicLands(),
+    maxGameChangers < Infinity ? getGameChangerNames() : Promise.resolve(new Set<string>()),
+  ]);
 
   const categories: Record<DeckCategory, ScryfallCard[]> = {
     lands: [],
@@ -868,6 +892,20 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     }
 
     console.log(`[DeckGen] Added ${addedCount} must-include cards to deck`);
+
+    // Cross-reference must-include cards with Scryfall game changer list
+    if (gameChangerNames.size > 0) {
+      const allAdded = Object.values(categories).flat();
+      for (const card of allAdded) {
+        if (card.isMustInclude && gameChangerNames.has(card.name)) {
+          card.isGameChanger = true;
+          gameChangerCount.value++;
+        }
+      }
+      if (gameChangerCount.value > 0) {
+        console.log(`[DeckGen] ${gameChangerCount.value} must-include card(s) are game changers`);
+      }
+    }
   }
 
   // Try to fetch EDHREC data (works for all formats)
@@ -884,8 +922,8 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     try {
       const themeDataPromises = selectedThemesWithSlugs.map(theme =>
         partnerCommander
-          ? fetchPartnerThemeData(commander.name, partnerCommander.name, theme.slug!, budgetOption)
-          : fetchCommanderThemeData(commander.name, theme.slug!, budgetOption)
+          ? fetchPartnerThemeData(commander.name, partnerCommander.name, theme.slug!, budgetOption, bracketLevel)
+          : fetchCommanderThemeData(commander.name, theme.slug!, budgetOption, bracketLevel)
       );
       const themeDataResults = await Promise.all(themeDataPromises);
 
@@ -907,8 +945,8 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       // Fall back to base commander data
       try {
         edhrecData = partnerCommander
-          ? await fetchPartnerCommanderData(commander.name, partnerCommander.name, budgetOption)
-          : await fetchCommanderData(commander.name, budgetOption);
+          ? await fetchPartnerCommanderData(commander.name, partnerCommander.name, budgetOption, bracketLevel)
+          : await fetchCommanderData(commander.name, budgetOption, bracketLevel);
         onProgress?.('Consulting ancient scrolls...', 12);
       } catch {
         onProgress?.('The oracle is silent... searching the multiverse...', 12);
@@ -919,8 +957,8 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
     onProgress?.('Consulting the wisdom of EDHREC...', 8);
     try {
       edhrecData = partnerCommander
-        ? await fetchPartnerCommanderData(commander.name, partnerCommander.name, budgetOption)
-        : await fetchCommanderData(commander.name, budgetOption);
+        ? await fetchPartnerCommanderData(commander.name, partnerCommander.name, budgetOption, bracketLevel)
+        : await fetchCommanderData(commander.name, budgetOption, bracketLevel);
       onProgress?.('Ancient knowledge acquired!', 12);
     } catch (error) {
       console.warn('Failed to fetch EDHREC data, falling back to Scryfall:', error);
@@ -1014,7 +1052,9 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       currentCurveCounts,
       bannedCards,
       'Creature',
-      maxCardPrice
+      maxCardPrice,
+      maxGameChangers,
+      gameChangerCount
     );
     categories.creatures.push(...creatures);
     console.log(`[DeckGen] Creatures: got ${creatures.length} from EDHREC`);
@@ -1052,7 +1092,9 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       currentCurveCounts,
       bannedCards,
       'Instant',
-      maxCardPrice
+      maxCardPrice,
+      maxGameChangers,
+      gameChangerCount
     );
     console.log(`[DeckGen] Instants: got ${instants.length} from EDHREC`);
     categorizeInstants(instants, categories);
@@ -1070,7 +1112,9 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       currentCurveCounts,
       bannedCards,
       'Sorcery',
-      maxCardPrice
+      maxCardPrice,
+      maxGameChangers,
+      gameChangerCount
     );
     console.log(`[DeckGen] Sorceries: got ${sorceries.length} from EDHREC`);
     categorizeSorceries(sorceries, categories);
@@ -1088,7 +1132,9 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       currentCurveCounts,
       bannedCards,
       'Artifact',
-      maxCardPrice
+      maxCardPrice,
+      maxGameChangers,
+      gameChangerCount
     );
     console.log(`[DeckGen] Artifacts: got ${artifacts.length} from EDHREC`);
     categorizeArtifacts(artifacts, categories);
@@ -1106,7 +1152,9 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       currentCurveCounts,
       bannedCards,
       'Enchantment',
-      maxCardPrice
+      maxCardPrice,
+      maxGameChangers,
+      gameChangerCount
     );
     console.log(`[DeckGen] Enchantments: got ${enchantments.length} from EDHREC`);
     categorizeEnchantments(enchantments, categories);
@@ -1125,7 +1173,9 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
         currentCurveCounts,
         bannedCards,
         'Planeswalker',
-        maxCardPrice
+        maxCardPrice,
+        maxGameChangers,
+        gameChangerCount
       );
       console.log(`[DeckGen] Planeswalkers: got ${planeswalkers.length} from EDHREC`);
       categories.utility.push(...planeswalkers);

@@ -238,6 +238,45 @@ export function getCachedCard(name: string): ScryfallCard | undefined {
   return cardCache.get(name);
 }
 
+// Cached set of game changer card names from Scryfall
+let gameChangerNamesCache: Set<string> | null = null;
+let gameChangerCacheTimestamp = 0;
+const GC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Fetch all game changer card names from Scryfall.
+ * Uses `is:gamechanger` search and paginates through all results.
+ */
+export async function getGameChangerNames(): Promise<Set<string>> {
+  if (gameChangerNamesCache && Date.now() - gameChangerCacheTimestamp < GC_CACHE_TTL) {
+    return gameChangerNamesCache;
+  }
+
+  const names = new Set<string>();
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore) {
+    try {
+      const response = await scryfallFetch<ScryfallSearchResponse>(
+        `/cards/search?q=${encodeURIComponent('is:gamechanger')}&page=${page}`
+      );
+      for (const card of response.data) {
+        names.add(card.name);
+      }
+      hasMore = response.has_more;
+      page++;
+    } catch {
+      break;
+    }
+  }
+
+  gameChangerNamesCache = names;
+  gameChangerCacheTimestamp = Date.now();
+  console.log(`[Scryfall] Cached ${names.size} game changer card names`);
+  return names;
+}
+
 export async function autocompleteCardName(query: string): Promise<string[]> {
   if (!query.trim() || query.length < 2) return [];
 

@@ -262,11 +262,15 @@ function CardPreviewModal({ card, onClose }: CardPreviewModalProps) {
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  deckList: string;
+  generateDeckList: (excludeMustIncludes: boolean) => string;
+  hasMustIncludes: boolean;
 }
 
-function ExportModal({ isOpen, onClose, deckList }: ExportModalProps) {
+function ExportModal({ isOpen, onClose, generateDeckList, hasMustIncludes }: ExportModalProps) {
   const [copied, setCopied] = useState(false);
+  const [excludeMustIncludes, setExcludeMustIncludes] = useState(false);
+
+  const deckList = useMemo(() => generateDeckList(excludeMustIncludes), [generateDeckList, excludeMustIncludes]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(deckList);
@@ -313,6 +317,18 @@ function ExportModal({ isOpen, onClose, deckList }: ExportModalProps) {
               <span className="text-xs">Download</span>
             </Button>
           </div>
+
+          {hasMustIncludes && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={excludeMustIncludes}
+                onChange={(e) => setExcludeMustIncludes(e.target.checked)}
+                className="rounded border-border accent-purple-500"
+              />
+              Exclude must-include cards
+            </label>
+          )}
 
           <textarea
             readOnly
@@ -786,20 +802,21 @@ export function DeckDisplay() {
     }
   };
 
-  const generateDeckList = () => {
+  const generateDeckList = useCallback((excludeMustIncludes: boolean = false) => {
     const lines: string[] = [];
 
     TYPE_ORDER.forEach((type) => {
       const cards = groupedCards[type];
       if (cards && cards.length > 0) {
         cards.forEach(({ card, quantity }) => {
+          if (excludeMustIncludes && card.isMustInclude) return;
           lines.push(`${quantity} ${card.name}`);
         });
       }
     });
 
     return lines.join('\n');
-  };
+  }, [groupedCards]);
 
   if (!generatedDeck) return null;
 
@@ -941,7 +958,7 @@ export function DeckDisplay() {
 
       {/* Modals */}
       <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
-      <ExportModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} deckList={generateDeckList()} />
+      <ExportModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} generateDeckList={generateDeckList} hasMustIncludes={customization.mustIncludeCards.length > 0} />
     </>
   );
 }

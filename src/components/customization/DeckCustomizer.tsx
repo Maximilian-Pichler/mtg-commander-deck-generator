@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { useStore } from '@/store';
-import type { DeckFormat, BudgetOption } from '@/types';
+import type { DeckFormat, BudgetOption, GameChangerLimit, BracketLevel } from '@/types';
 import { DECK_FORMAT_CONFIGS } from '@/lib/constants/archetypes';
 import { BannedCards } from './BannedCards';
 import { MustIncludeCards } from './MustIncludeCards';
@@ -12,11 +12,15 @@ export function DeckCustomizer() {
   const [editingLands, setEditingLands] = useState(false);
   const [landInputValue, setLandInputValue] = useState('');
   const [budgetOpen, setBudgetOpen] = useState(false);
+  const [powerLevelOpen, setPowerLevelOpen] = useState(false);
   const [cardListsOpen, setCardListsOpen] = useState(false);
   const [editingPrice, setEditingPrice] = useState(false);
   const [priceInputValue, setPriceInputValue] = useState('');
+  const [editingGcLimit, setEditingGcLimit] = useState(false);
+  const [gcLimitInputValue, setGcLimitInputValue] = useState('');
   const priceInputRef = useRef<HTMLInputElement>(null);
   const landInputRef = useRef<HTMLInputElement>(null);
+  const gcLimitInputRef = useRef<HTMLInputElement>(null);
 
   if (!commander) return null;
 
@@ -76,6 +80,13 @@ export function DeckCustomizer() {
     }
   }, [editingPrice]);
 
+  useEffect(() => {
+    if (editingGcLimit && gcLimitInputRef.current) {
+      gcLimitInputRef.current.focus();
+      gcLimitInputRef.current.select();
+    }
+  }, [editingGcLimit]);
+
   const startEditingLands = () => {
     setLandInputValue(String(customization.landCount));
     setEditingLands(true);
@@ -99,6 +110,19 @@ export function DeckCustomizer() {
     const parsed = parseFloat(priceInputValue);
     if (!isNaN(parsed) && parsed > 0) {
       updateCustomization({ maxCardPrice: parsed });
+    }
+  };
+
+  const startEditingGcLimit = () => {
+    setGcLimitInputValue(typeof customization.gameChangerLimit === 'number' ? String(customization.gameChangerLimit) : '');
+    setEditingGcLimit(true);
+  };
+
+  const commitGcLimitInput = () => {
+    setEditingGcLimit(false);
+    const parsed = parseInt(gcLimitInputValue, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      updateCustomization({ gameChangerLimit: parsed });
     }
   };
 
@@ -309,6 +333,143 @@ export function DeckCustomizer() {
                       : 'Custom'}
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Power Level Accordion */}
+      <div className={powerLevelOpen ? 'pt-2 border-t border-border/50' : ''}>
+        <button
+          onClick={() => setPowerLevelOpen(!powerLevelOpen)}
+          className="flex items-center justify-between w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+        >
+          <span className="font-medium flex items-center gap-2">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            Power Level
+            {!powerLevelOpen && (customization.gameChangerLimit !== 'unlimited' || customization.bracketLevel !== 'all') && (
+              <span className="text-[10px] font-normal text-primary bg-primary/20 px-1.5 py-0.5 rounded-full">
+                {[
+                  customization.bracketLevel !== 'all' ? `Bracket ${customization.bracketLevel}` : null,
+                  customization.gameChangerLimit === 'none' ? 'No GCs' : typeof customization.gameChangerLimit === 'number' ? `${customization.gameChangerLimit} GCs` : null,
+                ].filter(Boolean).join(' · ')}
+              </span>
+            )}
+          </span>
+          <svg
+            className={`w-4 h-4 transition-transform ${powerLevelOpen ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {powerLevelOpen && (
+          <div className="mt-3 space-y-4">
+            {/* Bracket Level */}
+            <div>
+              <label className="text-sm font-medium mb-2 block">Bracket Level</label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Filter EDHREC data by power level bracket.
+              </p>
+              <div className="grid grid-cols-6 gap-2">
+                {([
+                  { value: 'all' as BracketLevel, label: 'All' },
+                  { value: 1 as BracketLevel, label: '1' },
+                  { value: 2 as BracketLevel, label: '2' },
+                  { value: 3 as BracketLevel, label: '3' },
+                  { value: 4 as BracketLevel, label: '4' },
+                  { value: 5 as BracketLevel, label: '5' },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      const gcLimit: GameChangerLimit =
+                        option.value === 'all' ? 'unlimited'
+                        : option.value <= 2 ? 'none'
+                        : option.value === 3 ? 3
+                        : 'unlimited';
+                      updateCustomization({ bracketLevel: option.value, gameChangerLimit: gcLimit });
+                    }}
+                    className={`p-2 rounded-lg border text-center transition-colors ${
+                      customization.bracketLevel === option.value
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="font-medium text-xs">{option.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Game Changers */}
+            <div>
+              <label className="text-sm font-medium mb-2 block">Game Changers</label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Game changers are high-impact cards from EDHREC that can swing the game.
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => { setEditingGcLimit(false); updateCustomization({ gameChangerLimit: 'none' }); }}
+                  className={`p-2 rounded-lg border text-center transition-colors ${
+                    customization.gameChangerLimit === 'none'
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <div className="font-medium text-xs">None</div>
+                  <div className="text-[10px] text-muted-foreground">No game changers</div>
+                </button>
+                {editingGcLimit ? (
+                  <div className="p-2 rounded-lg border border-primary bg-primary/10 flex flex-col items-center justify-center">
+                    <input
+                      ref={gcLimitInputRef}
+                      type="number"
+                      min="1"
+                      value={gcLimitInputValue}
+                      onChange={(e) => setGcLimitInputValue(e.target.value)}
+                      onBlur={commitGcLimitInput}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitGcLimitInput();
+                        if (e.key === 'Escape') setEditingGcLimit(false);
+                      }}
+                      className="w-12 text-xs font-medium text-center bg-background border border-primary rounded px-1 py-0.5 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <div className="text-[10px] text-muted-foreground mt-0.5">max count</div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={startEditingGcLimit}
+                    className={`p-2 rounded-lg border text-center transition-colors ${
+                      typeof customization.gameChangerLimit === 'number'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="font-medium text-xs">
+                      {typeof customization.gameChangerLimit === 'number' ? `Up to ${customization.gameChangerLimit}` : 'Custom'}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">Set a limit</div>
+                  </button>
+                )}
+                <button
+                  onClick={() => { setEditingGcLimit(false); updateCustomization({ gameChangerLimit: 'unlimited' }); }}
+                  className={`p-2 rounded-lg border text-center transition-colors ${
+                    customization.gameChangerLimit === 'unlimited'
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <div className="font-medium text-xs">Unlimited</div>
+                  <div className="text-[10px] text-muted-foreground">No restriction</div>
+                </button>
               </div>
             </div>
           </div>

@@ -6,6 +6,7 @@ import type {
   EDHRECSimilarCommander,
   EDHRECTopCommander,
   BudgetOption,
+  BracketLevel,
 } from '@/types';
 
 const BASE_URL = import.meta.env.DEV ? '/edhrec-api' : 'https://json.edhrec.com';
@@ -134,6 +135,19 @@ function getBudgetSuffix(budgetOption?: BudgetOption): string {
   if (budgetOption === 'budget') return '/budget';
   if (budgetOption === 'expensive') return '/expensive';
   return '';
+}
+
+const BRACKET_SLUGS: Record<number, string> = {
+  1: 'exhibition',
+  2: 'core',
+  3: 'upgraded',
+  4: 'optimized',
+  5: 'cedh',
+};
+
+function getBracketSuffix(bracketLevel?: BracketLevel): string {
+  if (!bracketLevel || bracketLevel === 'all') return '';
+  return `/${BRACKET_SLUGS[bracketLevel]}`;
 }
 
 async function edhrecFetch<T>(endpoint: string): Promise<T> {
@@ -456,10 +470,11 @@ function mergeCardlists(
 /**
  * Fetch full commander data from EDHREC
  */
-export async function fetchCommanderData(commanderName: string, budgetOption?: BudgetOption): Promise<EDHRECCommanderData> {
+export async function fetchCommanderData(commanderName: string, budgetOption?: BudgetOption, bracketLevel?: BracketLevel): Promise<EDHRECCommanderData> {
   const formattedName = formatCommanderNameForUrl(commanderName);
+  const bracketSuffix = getBracketSuffix(bracketLevel);
   const budgetSuffix = getBudgetSuffix(budgetOption);
-  const cacheKey = `${formattedName}${budgetSuffix}`;
+  const cacheKey = `${formattedName}${bracketSuffix}${budgetSuffix}`;
 
   // Check cache first
   const cached = commanderCache.get(cacheKey);
@@ -469,7 +484,7 @@ export async function fetchCommanderData(commanderName: string, budgetOption?: B
 
   try {
     const response = await edhrecFetch<RawEDHRECResponse>(
-      `/pages/commanders/${formattedName}${budgetSuffix}.json`
+      `/pages/commanders/${formattedName}${bracketSuffix}${budgetSuffix}.json`
     );
 
     return parseEdhrecResponse(response, cacheKey);
@@ -486,14 +501,16 @@ export async function fetchCommanderData(commanderName: string, budgetOption?: B
 export async function fetchPartnerCommanderData(
   commander1: string,
   commander2: string,
-  budgetOption?: BudgetOption
+  budgetOption?: BudgetOption,
+  bracketLevel?: BracketLevel
 ): Promise<EDHRECCommanderData> {
   const [slugA, slugB] = getPartnerSlugs(commander1, commander2);
+  const bracketSuffix = getBracketSuffix(bracketLevel);
   const budgetSuffix = getBudgetSuffix(budgetOption);
 
   // Check cache for either ordering
   for (const slug of [slugA, slugB]) {
-    const cacheKey = `${slug}${budgetSuffix}`;
+    const cacheKey = `${slug}${bracketSuffix}${budgetSuffix}`;
     const cached = commanderCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return cached.data;
@@ -503,15 +520,15 @@ export async function fetchPartnerCommanderData(
   // Try both orderings - EDHREC doesn't always use alphabetical order
   // (redirects are detected and thrown by edhrecFetch)
   for (const slug of [slugA, slugB]) {
-    const cacheKey = `${slug}${budgetSuffix}`;
+    const cacheKey = `${slug}${bracketSuffix}${budgetSuffix}`;
     try {
       const response = await edhrecFetch<RawEDHRECResponse>(
-        `/pages/commanders/${slug}${budgetSuffix}.json`
+        `/pages/commanders/${slug}${bracketSuffix}${budgetSuffix}.json`
       );
-      console.log(`[EDHREC] Found partner page: /pages/commanders/${slug}${budgetSuffix}.json`);
+      console.log(`[EDHREC] Found partner page: /pages/commanders/${slug}${bracketSuffix}${budgetSuffix}.json`);
       return parseEdhrecResponse(response, cacheKey);
     } catch {
-      console.log(`[EDHREC] No partner page at ${slug}${budgetSuffix}`);
+      console.log(`[EDHREC] No partner page at ${slug}${bracketSuffix}${budgetSuffix}`);
     }
   }
 
@@ -519,8 +536,8 @@ export async function fetchPartnerCommanderData(
 
   // Fallback: fetch both individually and merge
   const [data1, data2] = await Promise.all([
-    fetchCommanderData(commander1, budgetOption).catch(() => null),
-    fetchCommanderData(commander2, budgetOption).catch(() => null),
+    fetchCommanderData(commander1, budgetOption, bracketLevel).catch(() => null),
+    fetchCommanderData(commander2, budgetOption, bracketLevel).catch(() => null),
   ]);
 
   if (data1 && data2) {
@@ -609,11 +626,13 @@ export async function fetchPartnerThemes(
 export async function fetchCommanderThemeData(
   commanderName: string,
   themeSlug: string,
-  budgetOption?: BudgetOption
+  budgetOption?: BudgetOption,
+  bracketLevel?: BracketLevel
 ): Promise<EDHRECCommanderData> {
   const formattedName = formatCommanderNameForUrl(commanderName);
+  const bracketSuffix = getBracketSuffix(bracketLevel);
   const budgetSuffix = getBudgetSuffix(budgetOption);
-  const cacheKey = `${formattedName}/${themeSlug}${budgetSuffix}`;
+  const cacheKey = `${formattedName}${bracketSuffix}/${themeSlug}${budgetSuffix}`;
 
   // Check cache first
   const cached = commanderCache.get(cacheKey);
@@ -623,7 +642,7 @@ export async function fetchCommanderThemeData(
 
   try {
     const response = await edhrecFetch<RawEDHRECResponse>(
-      `/pages/commanders/${formattedName}/${themeSlug}${budgetSuffix}.json`
+      `/pages/commanders/${formattedName}${bracketSuffix}/${themeSlug}${budgetSuffix}.json`
     );
 
     // Parse stats
@@ -677,14 +696,16 @@ export async function fetchPartnerThemeData(
   commander1: string,
   commander2: string,
   themeSlug: string,
-  budgetOption?: BudgetOption
+  budgetOption?: BudgetOption,
+  bracketLevel?: BracketLevel
 ): Promise<EDHRECCommanderData> {
   const [slugA, slugB] = getPartnerSlugs(commander1, commander2);
+  const bracketSuffix = getBracketSuffix(bracketLevel);
   const budgetSuffix = getBudgetSuffix(budgetOption);
 
   // Check cache for either ordering
   for (const slug of [slugA, slugB]) {
-    const cacheKey = `${slug}/${themeSlug}${budgetSuffix}`;
+    const cacheKey = `${slug}${bracketSuffix}/${themeSlug}${budgetSuffix}`;
     const cached = commanderCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return cached.data;
@@ -693,12 +714,12 @@ export async function fetchPartnerThemeData(
 
   // Try both orderings
   for (const slug of [slugA, slugB]) {
-    const cacheKey = `${slug}/${themeSlug}${budgetSuffix}`;
+    const cacheKey = `${slug}${bracketSuffix}/${themeSlug}${budgetSuffix}`;
     try {
       const response = await edhrecFetch<RawEDHRECResponse>(
-        `/pages/commanders/${slug}/${themeSlug}${budgetSuffix}.json`
+        `/pages/commanders/${slug}${bracketSuffix}/${themeSlug}${budgetSuffix}.json`
       );
-      console.log(`[EDHREC] Found partner theme page: ${slug}/${themeSlug}${budgetSuffix}`);
+      console.log(`[EDHREC] Found partner theme page: ${slug}${bracketSuffix}/${themeSlug}${budgetSuffix}`);
 
       const stats: EDHRECCommanderStats = {
         avgPrice: response.avg_price || 0,
@@ -740,7 +761,7 @@ export async function fetchPartnerThemeData(
 
   console.log(`[EDHREC] No partner theme page found, falling back to primary commander`);
   // Fallback: use primary commander's theme data
-  return fetchCommanderThemeData(commander1, themeSlug, budgetOption);
+  return fetchCommanderThemeData(commander1, themeSlug, budgetOption, bracketLevel);
 }
 
 /**

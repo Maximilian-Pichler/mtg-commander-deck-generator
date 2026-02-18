@@ -14,7 +14,7 @@ import {
   detectArchetypes,
   getArchetypeDefaultCustomization,
 } from '@/services/deckBuilder/archetypeDetector';
-import { fetchCommanderThemes, fetchPartnerThemes } from '@/services/edhrec';
+import { fetchCommanderThemes, fetchPartnerThemes, formatCommanderNameForUrl } from '@/services/edhrec';
 import { ARCHETYPE_LABELS } from '@/lib/constants/archetypes';
 import { applyCommanderTheme, resetTheme } from '@/lib/commanderTheme';
 import type { ThemeResult } from '@/types';
@@ -378,7 +378,7 @@ export function BuilderPage() {
                           {commander.name}
                         </h3>
                         <a
-                          href={`https://edhrec.com/commanders/${commander.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                          href={`https://edhrec.com/commanders/${formatCommanderNameForUrl(commander.name)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="shrink-0 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
@@ -438,7 +438,7 @@ export function BuilderPage() {
                             {partnerCommander.name}
                           </h3>
                           <a
-                            href={`https://edhrec.com/commanders/${partnerCommander.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                            href={`https://edhrec.com/commanders/${formatCommanderNameForUrl(partnerCommander.name)}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="shrink-0 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent transition-colors"

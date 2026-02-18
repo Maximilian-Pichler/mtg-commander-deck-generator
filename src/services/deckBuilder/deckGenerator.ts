@@ -81,7 +81,7 @@ function calculateTargetCounts(
   }
 
   // Fallback defaults for different formats
-  const defaults: Record<DeckFormat, DeckComposition> = {
+  const knownDefaults: Record<number, DeckComposition> = {
     99: {
       lands: landCount,
       ramp: 10,
@@ -114,8 +114,21 @@ function calculateTargetCounts(
     },
   };
 
-  // Fallback type targets and curve targets
-  const fallbackComposition = defaults[format];
+  // Fallback type targets and curve targets — interpolate for custom sizes
+  const fallbackComposition: DeckComposition = knownDefaults[format] ?? (() => {
+    // Scale proportionally based on non-land card count
+    const ratio = nonLandCards / 62; // 62 = 99 - 37 lands (Commander baseline)
+    return {
+      lands: landCount,
+      ramp: Math.max(1, Math.round(10 * ratio)),
+      cardDraw: Math.max(1, Math.round(10 * ratio)),
+      singleRemoval: Math.max(1, Math.round(8 * ratio)),
+      boardWipes: Math.max(0, Math.round(3 * ratio)),
+      creatures: Math.max(2, Math.round(25 * ratio)),
+      synergy: Math.max(1, Math.round(30 * ratio)),
+      utility: Math.max(0, Math.round(3 * ratio)),
+    };
+  })();
   const fallbackTypeTargets: Record<string, number> = {
     creature: fallbackComposition.creatures,
     instant: fallbackComposition.singleRemoval + Math.floor(fallbackComposition.cardDraw / 2),
@@ -146,10 +159,13 @@ function calculateTargetCounts(
 }
 
 // Check if a card exceeds the max price limit
+// Cards with no USD price are treated as exceeding the limit when a budget is active
 function exceedsMaxPrice(card: ScryfallCard, maxPrice: number | null): boolean {
   if (maxPrice === null) return false;
-  const price = parseFloat(card.prices?.usd || '0');
-  return price > maxPrice;
+  const priceStr = card.prices?.usd;
+  if (!priceStr) return true; // No price data — skip when budget is set
+  const price = parseFloat(priceStr);
+  return isNaN(price) || price > maxPrice;
 }
 
 // Check if a card exceeds the max rarity limit

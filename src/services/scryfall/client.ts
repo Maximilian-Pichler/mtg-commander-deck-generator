@@ -130,29 +130,49 @@ export async function getCardByName(name: string, exact = true): Promise<Scryfal
  */
 async function fetchCardByNameThrottled(name: string, retries = 2): Promise<ScryfallCard | null> {
   try {
-    // Always go through the rate limiter
     await rateLimiter.acquire();
 
-    const encodedName = encodeURIComponent(name);
-    const response = await fetch(`${BASE_URL}/cards/named?exact=${encodedName}`, {
-      headers: { 'Accept': 'application/json' },
-    });
+    // Search for cheapest USD paper printing across all sets
+    // Filter out digital-only printings and require a USD price
+    const searchQuery = encodeURIComponent(`!"${name}" -is:digital`);
+    const response = await fetch(
+      `${BASE_URL}/cards/search?q=${searchQuery}&unique=prints&order=usd&dir=asc`,
+      { headers: { 'Accept': 'application/json' } }
+    );
 
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      if (response.status === 429 && retries > 0) {
-        // Rate limited - exponential backoff and retry
-        const backoffMs = 1000 * (3 - retries); // 1s, 2s
-        console.warn(`[Scryfall] Rate limited, backing off ${backoffMs}ms...`);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
-        return fetchCardByNameThrottled(name, retries - 1);
+    if (response.ok) {
+      const searchResult = await response.json() as ScryfallSearchResponse;
+      if (searchResult.data.length > 0) {
+        // Pick the first printing that has a USD price; fall back to first result
+        const card = searchResult.data.find(c => c.prices?.usd) || searchResult.data[0];
+        cardCache.set(name, card);
+        // Also cache under Scryfall's canonical name if different
+        if (card.name !== name) cardCache.set(card.name, card);
+        return card;
       }
-      return null;
     }
 
-    const card = await response.json() as ScryfallCard;
-    cardCache.set(card.name, card);
-    return card;
+    if (response.status === 429 && retries > 0) {
+      const backoffMs = 1000 * (3 - retries);
+      console.warn(`[Scryfall] Rate limited, backing off ${backoffMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+      return fetchCardByNameThrottled(name, retries - 1);
+    }
+
+    // Fallback to /cards/named if search returned no results (name mismatch, etc.)
+    if (response.status === 404) {
+      await rateLimiter.acquire();
+      const namedResponse = await fetch(
+        `${BASE_URL}/cards/named?exact=${encodeURIComponent(name)}`,
+        { headers: { 'Accept': 'application/json' } }
+      );
+      if (!namedResponse.ok) return null;
+      const card = await namedResponse.json() as ScryfallCard;
+      cardCache.set(card.name, card);
+      return card;
+    }
+
+    return null;
   } catch {
     return null;
   }

@@ -309,7 +309,7 @@ export const DECK_FORMAT_CONFIGS: Record<DeckFormat, DeckFormatConfig> = {
   },
   60: {
     size: 60,
-    label: 'Oathbreaker (60)',
+    label: 'Brawl (60)',
     description: '59 cards + commander',
     defaultLands: 23,
     landRange: [19, 27],
@@ -326,6 +326,25 @@ export const DECK_FORMAT_CONFIGS: Record<DeckFormat, DeckFormatConfig> = {
     allowMultipleCopies: false,
   },
 };
+
+// Helper to get format config for any deck size (known or custom)
+export function getDeckFormatConfig(size: number): DeckFormatConfig {
+  if (size in DECK_FORMAT_CONFIGS) {
+    return DECK_FORMAT_CONFIGS[size];
+  }
+  // Interpolate sensible defaults for custom sizes
+  const landRatio = size <= 50 ? 0.4 : size <= 70 ? 0.38 : 0.37;
+  const defaultLands = Math.round((size - 1) * landRatio);
+  return {
+    size,
+    label: `Custom (${size})`,
+    description: `${size - 1} cards + commander`,
+    defaultLands,
+    landRange: [Math.max(1, Math.floor(defaultLands * 0.8)), Math.ceil(defaultLands * 1.2)] as [number, number],
+    hasCommander: true,
+    allowMultipleCopies: false,
+  };
+}
 
 // Base deck composition for different formats (excluding commander/lands)
 export const FORMAT_BASE_COMPOSITION: Record<DeckFormat, DeckComposition> = {

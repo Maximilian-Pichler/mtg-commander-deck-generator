@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { useStore } from '@/store';
 import type { DeckFormat, BudgetOption, GameChangerLimit, BracketLevel, MaxRarity } from '@/types';
-import { DECK_FORMAT_CONFIGS } from '@/lib/constants/archetypes';
+import { getDeckFormatConfig } from '@/lib/constants/archetypes';
 import { BannedCards } from './BannedCards';
 import { MustIncludeCards } from './MustIncludeCards';
 import { LandIcon } from '@/components/ui/mtg-icons';
@@ -19,9 +19,12 @@ export function DeckCustomizer() {
   const [priceInputValue, setPriceInputValue] = useState('');
   const [editingGcLimit, setEditingGcLimit] = useState(false);
   const [gcLimitInputValue, setGcLimitInputValue] = useState('');
+  const [editingCustomFormat, setEditingCustomFormat] = useState(false);
+  const [customFormatValue, setCustomFormatValue] = useState('');
   const priceInputRef = useRef<HTMLInputElement>(null);
   const landInputRef = useRef<HTMLInputElement>(null);
   const gcLimitInputRef = useRef<HTMLInputElement>(null);
+  const customFormatInputRef = useRef<HTMLInputElement>(null);
 
   if (!commander) return null;
 
@@ -33,21 +36,27 @@ export function DeckCustomizer() {
     return `${cardCount} cards + ${commanderText}`;
   };
 
-  const formatOptions = ([40, 60, 99] as DeckFormat[]).map((size) => {
-    const config = DECK_FORMAT_CONFIGS[size];
-    return {
-      value: size,
-      label: config.label.split(' ')[0], // "Brawl (40)" -> "Brawl"
-      description: getFormatDescription(size),
-    };
-  });
+  const isCustomFormat = ![60, 99].includes(customization.deckFormat);
 
-  const currentFormat = DECK_FORMAT_CONFIGS[customization.deckFormat];
+  const startEditingCustomFormat = () => {
+    setCustomFormatValue(isCustomFormat ? String(customization.deckFormat) : '40');
+    setEditingCustomFormat(true);
+  };
+
+  const commitCustomFormat = () => {
+    setEditingCustomFormat(false);
+    const parsed = parseInt(customFormatValue, 10);
+    if (!isNaN(parsed) && parsed >= 10 && parsed <= 200) {
+      handleFormatChange(parsed);
+    }
+  };
+
+  const currentFormat = getDeckFormatConfig(customization.deckFormat);
   const landRange = currentFormat.landRange;
 
   // Handle format change - also update land counts to format defaults
   const handleFormatChange = (format: DeckFormat) => {
-    const formatConfig = DECK_FORMAT_CONFIGS[format];
+    const formatConfig = getDeckFormatConfig(format);
     // Scale non-basic count proportionally to new format
     const defaultNonBasic = Math.min(15, Math.floor(formatConfig.defaultLands * 0.4));
     updateCustomization({
@@ -87,6 +96,13 @@ export function DeckCustomizer() {
       gcLimitInputRef.current.select();
     }
   }, [editingGcLimit]);
+
+  useEffect(() => {
+    if (editingCustomFormat && customFormatInputRef.current) {
+      customFormatInputRef.current.focus();
+      customFormatInputRef.current.select();
+    }
+  }, [editingCustomFormat]);
 
   const startEditingLands = () => {
     setLandInputValue(String(customization.landCount));
@@ -133,20 +149,64 @@ export function DeckCustomizer() {
       <div>
         <label className="text-sm font-medium mb-3 block">Deck Format</label>
         <div className="grid grid-cols-3 gap-2">
-          {formatOptions.map((option) => (
+          {/* Custom size option */}
+          {editingCustomFormat ? (
+            <div className="p-3 rounded-lg border border-primary bg-primary/10 text-center flex flex-col items-center justify-center">
+              <input
+                ref={customFormatInputRef}
+                type="number"
+                min="10"
+                max="200"
+                value={customFormatValue}
+                onChange={(e) => setCustomFormatValue(e.target.value)}
+                onBlur={commitCustomFormat}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitCustomFormat();
+                  if (e.key === 'Escape') setEditingCustomFormat(false);
+                }}
+                className="w-14 text-sm font-medium text-center bg-background border border-primary rounded px-1 py-0.5 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <div className="text-xs text-muted-foreground mt-1">total cards</div>
+            </div>
+          ) : (
             <button
-              key={option.value}
-              onClick={() => handleFormatChange(option.value)}
+              onClick={startEditingCustomFormat}
               className={`p-3 rounded-lg border text-center transition-colors ${
-                customization.deckFormat === option.value
+                isCustomFormat
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border hover:border-primary/50'
               }`}
             >
-              <div className="font-medium text-sm">{option.label}</div>
-              <div className="text-xs text-muted-foreground">{option.description}</div>
+              <div className="font-medium text-sm">Custom</div>
+              <div className="text-xs text-muted-foreground">
+                {isCustomFormat ? getFormatDescription(customization.deckFormat) : getFormatDescription(40)}
+              </div>
             </button>
-          ))}
+          )}
+          {/* Brawl 60 */}
+          <button
+            onClick={() => handleFormatChange(60)}
+            className={`p-3 rounded-lg border text-center transition-colors ${
+              customization.deckFormat === 60
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border hover:border-primary/50'
+            }`}
+          >
+            <div className="font-medium text-sm">Brawl</div>
+            <div className="text-xs text-muted-foreground">{getFormatDescription(60)}</div>
+          </button>
+          {/* Commander 99 */}
+          <button
+            onClick={() => handleFormatChange(99)}
+            className={`p-3 rounded-lg border text-center transition-colors ${
+              customization.deckFormat === 99
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border hover:border-primary/50'
+            }`}
+          >
+            <div className="font-medium text-sm">Commander</div>
+            <div className="text-xs text-muted-foreground">{getFormatDescription(99)}</div>
+          </button>
         </div>
       </div>
 

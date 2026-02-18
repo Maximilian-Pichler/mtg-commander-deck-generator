@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
 import { getCardImageUrl } from '@/services/scryfall/client';
-import { DECK_FORMAT_CONFIGS } from '@/lib/constants/archetypes';
+import { getDeckFormatConfig } from '@/lib/constants/archetypes';
 import type { ScryfallCard } from '@/types';
 import {
   Copy,
@@ -690,7 +690,7 @@ type GroupedCards = Record<CardType, Array<{ card: ScryfallCard; quantity: numbe
 // Main component
 export function DeckDisplay() {
   const { generatedDeck, commander, customization } = useStore();
-  const formatConfig = DECK_FORMAT_CONFIGS[customization.deckFormat];
+  const formatConfig = getDeckFormatConfig(customization.deckFormat);
   const [previewCard, setPreviewCard] = useState<ScryfallCard | null>(null);
   const [hoverCard, setHoverCard] = useState<{ card: ScryfallCard; position: { x: number; y: number } } | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);

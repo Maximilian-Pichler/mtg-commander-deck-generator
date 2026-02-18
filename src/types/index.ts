@@ -232,7 +232,7 @@ export interface DeckStats {
 }
 
 // Deck format/size
-export type DeckFormat = 40 | 60 | 99;
+export type DeckFormat = number;
 
 export interface DeckFormatConfig {
   size: DeckFormat;

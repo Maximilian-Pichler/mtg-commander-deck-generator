@@ -431,7 +431,7 @@ function ExportModal({ isOpen, onClose, generateDeckList, hasMustIncludes }: Exp
 const MANA_COLORS: Record<string, { name: string; color: string; bgColor: string }> = {
   W: { name: 'White', color: '#F9FAF4', bgColor: 'bg-amber-100' },
   U: { name: 'Blue', color: '#0E68AB', bgColor: 'bg-blue-500' },
-  B: { name: 'Black', color: '#9B8E99', bgColor: 'bg-purple-300' }, // Lighter purple-gray for visibility
+  B: { name: 'Black', color: '#D8B4FE', bgColor: 'bg-purple-300' }, // Matches bg-purple-300 for consistency
   R: { name: 'Red', color: '#D3202A', bgColor: 'bg-red-500' },
   G: { name: 'Green', color: '#00733E', bgColor: 'bg-green-600' },
   C: { name: 'Colorless', color: '#CBC2BF', bgColor: 'bg-gray-400' },
@@ -456,6 +456,21 @@ function PieChart({ data, size = 120, activeColorKey, onSegmentClick }: {
     const startAngle = currentAngle;
     const endAngle = currentAngle + angle;
     currentAngle = endAngle;
+
+    // Full circle: SVG arcs can't draw a 360° arc, so use two semicircles
+    if (angle >= 359.99) {
+      const path = `
+        M ${radius} 0
+        A ${radius} ${radius} 0 1 1 ${radius} ${size}
+        A ${radius} ${radius} 0 1 1 ${radius} 0
+        Z
+        M ${radius - innerRadius} ${radius}
+        A ${innerRadius} ${innerRadius} 0 1 0 ${radius + innerRadius} ${radius}
+        A ${innerRadius} ${innerRadius} 0 1 0 ${radius - innerRadius} ${radius}
+        Z
+      `;
+      return { ...d, path };
+    }
 
     const startRad = (startAngle * Math.PI) / 180;
     const endRad = (endAngle * Math.PI) / 180;
@@ -490,6 +505,7 @@ function PieChart({ data, size = 120, activeColorKey, onSegmentClick }: {
           key={i}
           d={seg.path}
           fill={seg.color}
+          fillRule="evenodd"
           className={`transition-opacity ${
             activeColorKey && seg.colorKey !== activeColorKey ? 'opacity-30' : 'hover:opacity-80'
           }`}
@@ -697,9 +713,10 @@ function DeckStats({ activeFilter, onFilterChange }: DeckStatsProps) {
                       }`}
                       onClick={() => onFilterChange({ type: 'color', value: color })}
                     >
-                      <div className={`w-3 h-3 rounded-full ${MANA_COLORS[color].bgColor} ${
-                        isActive ? 'ring-2 ring-primary' : ''
-                      }`} />
+                      <div
+                        className={`w-3 h-3 rounded-full ${isActive ? 'ring-2 ring-primary' : ''}`}
+                        style={{ backgroundColor: MANA_COLORS[color].color }}
+                      />
                       <span className="text-xs flex-1 text-left">{MANA_COLORS[color].name}</span>
                       <span className={`text-xs font-medium ${isActive ? 'text-primary' : ''}`}>{percent}%</span>
                     </button>
@@ -757,7 +774,6 @@ function DeckStats({ activeFilter, onFilterChange }: DeckStatsProps) {
         <div className="space-y-1">
           {Object.entries(stats.typeDistribution)
             .sort(([, a], [, b]) => b - a)
-            .slice(0, 5)
             .map(([type, count]) => (
               <div key={type} className="flex justify-between text-xs">
                 <span>{type}</span>
@@ -1012,21 +1028,18 @@ export function DeckDisplay() {
           <div className="flex items-center gap-4">
             <div className="text-sm text-muted-foreground">
               {totalCards} cards · ${totalPrice.toFixed(2)}
-              {customization.deckBudget !== null && (
-                <span className="ml-1 text-xs text-muted-foreground/70">(excludes commander)</span>
-              )}
               {(customization.budgetOption !== 'any' || customization.maxCardPrice !== null || customization.deckBudget !== null) && (
                 <span className="ml-1 text-xs">
                   ({[
                     customization.budgetOption === 'budget' ? 'Budget' : customization.budgetOption === 'expensive' ? 'Expensive' : null,
                     customization.maxCardPrice !== null ? `<$${customization.maxCardPrice}/card` : null,
-                    customization.deckBudget !== null ? `${totalPrice > customization.deckBudget ? '~' : ''}$${customization.deckBudget} budget` : null,
+                    customization.deckBudget !== null ? `${totalPrice > customization.deckBudget ? '~' : ''}$${customization.deckBudget} budget, excludes commander` : null,
                   ].filter(Boolean).join(' · ')})
                 </span>
               )}
               {usedThemes && usedThemes.length > 0 && (
                 <span className="ml-2">
-                  · Built with: <span className="text-primary font-medium">{usedThemes.join(', ')}</span>
+                  · Built with: <span className="font-medium">{usedThemes.join(', ')}</span>
                 </span>
               )}
             </div>

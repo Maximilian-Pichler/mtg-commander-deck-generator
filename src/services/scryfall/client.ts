@@ -504,3 +504,54 @@ export async function searchValidPartners(
     return [];
   }
 }
+
+// Word-to-number mapping for parsing "up to seven" style caps
+const WORD_TO_NUMBER: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+  fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+  nineteen: 19, twenty: 20,
+};
+
+// Cached result so we only query Scryfall once per session
+let multiCopyCardsCache: Map<string, number | null> | null = null;
+
+/**
+ * Fetches all cards with "a deck can have any number/up to N" oracle text from Scryfall.
+ * Returns a map of card name → maxCopies (null = unlimited).
+ * Results are cached for the session — only one API call ever made.
+ */
+export async function fetchMultiCopyCardNames(): Promise<Map<string, number | null>> {
+  if (multiCopyCardsCache) return multiCopyCardsCache;
+
+  const result = new Map<string, number | null>();
+
+  try {
+    const encodedQuery = encodeURIComponent('o:"a deck can have" f:commander');
+    const response = await scryfallFetch<ScryfallSearchResponse>(
+      `/cards/search?q=${encodedQuery}&unique=cards`
+    );
+
+    for (const card of response.data) {
+      const oracle = (card.oracle_text || card.card_faces?.[0]?.oracle_text || '').toLowerCase();
+
+      // "a deck can have any number of cards named X" → unlimited
+      if (oracle.includes('any number of cards named')) {
+        result.set(card.name, null);
+        continue;
+      }
+
+      // "a deck can have up to seven cards named X" → parse the number
+      const capMatch = oracle.match(/a deck can have up to (\w+) cards named/);
+      if (capMatch) {
+        const num = WORD_TO_NUMBER[capMatch[1]] ?? parseInt(capMatch[1], 10);
+        result.set(card.name, isNaN(num) ? null : num);
+      }
+    }
+  } catch (error) {
+    console.warn('[Scryfall] Failed to fetch multi-copy card list:', error);
+  }
+
+  multiCopyCardsCache = result;
+  return result;
+}

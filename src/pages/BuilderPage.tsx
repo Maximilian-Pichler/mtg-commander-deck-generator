@@ -97,7 +97,9 @@ export function BuilderPage() {
       const archetypes = detectArchetypes(card);
       setDetectedArchetypes(archetypes);
 
-      if (archetypes.length > 0) {
+      // Only apply archetype land-count defaults on first commander of the session
+      // (when landCount is still the store default). Preserve user's choice when switching.
+      if (archetypes.length > 0 && customization.landCount === 37) {
         const defaults = getArchetypeDefaultCustomization(archetypes[0].archetype);
         updateCustomization(defaults);
       }

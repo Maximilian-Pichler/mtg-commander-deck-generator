@@ -851,3 +851,63 @@ const TOP_COMMANDERS: EDHRECTopCommander[] = [
 export function getTopCommanders(limit: number = 20): EDHRECTopCommander[] {
   return TOP_COMMANDERS.slice(0, limit);
 }
+
+/**
+ * Fetch all multi-copy card quantities from an EDHREC average deck.
+ * Returns a Map of cardName → quantity for cards with >1 copy, or null if the fetch failed entirely.
+ * Returning null (fetch failed) vs empty Map (fetch succeeded, no multi-copy cards) is important
+ * for distinguishing fallback behavior.
+ */
+export async function fetchAverageDeckMultiCopies(
+  commanderName: string,
+  cardNamesToCheck: string[],
+  themeSlug?: string
+): Promise<Map<string, number> | null> {
+  try {
+    await rateLimiter.throttle();
+
+    const formatted = formatCommanderNameForUrl(commanderName);
+    const themePart = themeSlug ? `/${themeSlug}` : '';
+    const url = `${BASE_URL}/pages/average-decks/${formatted}${themePart}.json`;
+
+    console.log(`[EDHREC] Fetching average deck from: ${url}`);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn(`[EDHREC] Average deck fetch failed (${response.status}) for ${formatted}${themePart}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const deckList: string[] = data?.deck || data?.decklist || [];
+
+    if (!Array.isArray(deckList) || deckList.length === 0) {
+      console.warn('[EDHREC] Average deck has no deck array');
+      return null;
+    }
+
+    // Build a lookup set for the cards we care about
+    const lookupSet = new Set(cardNamesToCheck.map(n => n.toLowerCase()));
+    const result = new Map<string, number>();
+
+    // Each entry is "N CardName" (e.g., "20 Slime Against Humanity", "1 Sol Ring")
+    for (const entry of deckList) {
+      const match = entry.match(/^(\d+)\s+(.+)$/);
+      if (match) {
+        const quantity = parseInt(match[1], 10);
+        const name = match[2].trim();
+        if (quantity > 1 && lookupSet.has(name.toLowerCase())) {
+          // Use the original casing from cardNamesToCheck
+          const originalName = cardNamesToCheck.find(n => n.toLowerCase() === name.toLowerCase());
+          result.set(originalName ?? name, quantity);
+          console.log(`[EDHREC] Found ${quantity} copies of "${originalName ?? name}" in average deck`);
+        }
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.warn('[EDHREC] Failed to fetch average deck multi-copies:', error);
+    return null;
+  }
+}

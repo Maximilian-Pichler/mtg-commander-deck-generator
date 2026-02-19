@@ -13,13 +13,14 @@ import type {
   EDHRECCommanderStats,
   MaxRarity,
 } from '@/types';
-import { searchCards, getCardByName, getCardsByNames, prefetchBasicLands, getCachedCard, getGameChangerNames, getCardPrice, getFrontFaceTypeLine } from '@/services/scryfall/client';
-import { fetchCommanderData, fetchCommanderThemeData, fetchPartnerCommanderData, fetchPartnerThemeData } from '@/services/edhrec/client';
+import { searchCards, getCardByName, getCardsByNames, prefetchBasicLands, getCachedCard, getGameChangerNames, getCardPrice, getFrontFaceTypeLine, fetchMultiCopyCardNames } from '@/services/scryfall/client';
+import { fetchCommanderData, fetchCommanderThemeData, fetchPartnerCommanderData, fetchPartnerThemeData, fetchAverageDeckMultiCopies } from '@/services/edhrec/client';
 import {
   calculateTypeTargets,
   calculateCurveTargets,
   hasCurveRoom,
 } from './curveUtils';
+import { getDeckFormatConfig } from '@/lib/constants/archetypes';
 
 interface GenerationContext {
   commander: ScryfallCard;
@@ -52,11 +53,18 @@ function calculateTargetCounts(
 ): TargetCountsResult {
   const format = customization.deckFormat;
 
-  // Use user's land count preference (allow manual overrides beyond slider range)
-  const landCount = Math.max(0, customization.landCount);
-
   // Calculate total deck cards (commander is separate for 99, included for 40/60)
   const deckCards = format === 99 ? 99 : format - 1;
+
+  // Clamp land count to valid range for the format (safety net in case UI state is stale)
+  const formatConfig = getDeckFormatConfig(format);
+  const landCount = Math.min(
+    Math.max(formatConfig.landRange[0], customization.landCount),
+    formatConfig.landRange[1]
+  );
+  if (landCount !== customization.landCount) {
+    console.warn(`[DeckGen] Clamped landCount from ${customization.landCount} to ${landCount} for ${format}-card format (range: ${formatConfig.landRange[0]}-${formatConfig.landRange[1]})`);
+  }
   const nonLandCards = deckCards - landCount;
 
   // If we have EDHREC stats, use percentage-based targets
@@ -625,6 +633,118 @@ const BASIC_LAND_NAMES = new Set([
   'Wastes',
 ]);
 
+// ============================================================
+// Multi-copy card support ("A deck can have any number of...")
+// ============================================================
+const DEFAULT_MULTI_COPY_COUNT = 15; // Fallback when EDHREC average deck is unavailable
+
+interface MultiCopyResult {
+  card: ScryfallCard;
+  copies: ScryfallCard[];
+}
+
+/**
+ * Self-contained pipeline: detect "any number of copies" cards in the EDHREC cardlist,
+ * fetch the recommended quantity from EDHREC's average deck, scale to deck size,
+ * and return the copies to add. Returns empty array if no multi-copy cards found.
+ *
+ * Uses Scryfall oracle text search to dynamically detect multi-copy cards
+ * rather than a hardcoded list, so new cards are automatically supported.
+ */
+async function resolveMultiCopyCards(
+  edhrecCardNames: string[],
+  commanderName: string,
+  themeSlug: string | undefined,
+  usedNames: Set<string>,
+  deckSize: number,
+  bannedCards: Set<string>,
+  maxCardPrice: number | null,
+  maxRarity: MaxRarity,
+): Promise<MultiCopyResult[]> {
+  // Step 1: Fetch the set of all multi-copy cards from Scryfall (cached after first call)
+  const multiCopyCards = await fetchMultiCopyCardNames();
+  if (multiCopyCards.size === 0) return [];
+
+  // Step 2: Check if any EDHREC card is a multi-copy card
+  const matches = edhrecCardNames.filter(name => multiCopyCards.has(name) && !bannedCards.has(name));
+  if (matches.length === 0) return [];
+
+  console.log(`[DeckGen] Multi-copy cards detected in cardlist: ${matches.join(', ')}`);
+
+  // Step 3: Fetch ALL quantities in one request (null = fetch failed entirely)
+  const quantityMap = await fetchAverageDeckMultiCopies(commanderName, matches, themeSlug);
+  const fetchFailed = quantityMap === null;
+
+  const results: MultiCopyResult[] = [];
+
+  for (const cardName of matches) {
+    const maxCopies = multiCopyCards.get(cardName)!; // null = unlimited
+
+    let quantity: number;
+    if (fetchFailed) {
+      // Endpoint unreachable — use a sensible fallback
+      quantity = maxCopies ?? DEFAULT_MULTI_COPY_COUNT;
+      console.log(`[DeckGen] Average deck unavailable, using fallback ${quantity} for "${cardName}"`);
+    } else if (quantityMap.has(cardName)) {
+      // Card found in average deck with >1 copies — use that count
+      quantity = quantityMap.get(cardName)!;
+    } else {
+      // Fetch succeeded but card only has 1 copy in average deck — skip multi-copy
+      console.log(`[DeckGen] "${cardName}" not multi-copy in average deck, skipping`);
+      continue;
+    }
+
+    // Step 4: Scale to deck size (EDHREC data is based on 100-card decks)
+    const scaledQuantity = Math.round(quantity * (deckSize / 100));
+    let finalQuantity = Math.max(2, scaledQuantity); // Minimum 2 copies
+
+    // Step 5: Respect maxCopies cap
+    if (maxCopies !== null) {
+      finalQuantity = Math.min(finalQuantity, maxCopies);
+    }
+
+    // Step 6: If already in deck as must-include, reduce count
+    const existingCount = usedNames.has(cardName) ? 1 : 0;
+    const copiesToAdd = finalQuantity - existingCount;
+    if (copiesToAdd <= 0) {
+      console.log(`[DeckGen] "${cardName}" already in deck, no extra copies needed`);
+      continue;
+    }
+
+    // Step 7: Fetch the card from Scryfall
+    try {
+      const card = await getCardByName(cardName);
+      if (!card) {
+        console.warn(`[DeckGen] Could not find "${cardName}" on Scryfall, skipping multi-copy`);
+        continue;
+      }
+
+      // Verify price/rarity constraints on the card itself
+      if (exceedsMaxPrice(card, maxCardPrice)) {
+        console.log(`[DeckGen] "${cardName}" exceeds max card price, skipping multi-copy`);
+        continue;
+      }
+      if (exceedsMaxRarity(card, maxRarity)) {
+        console.log(`[DeckGen] "${cardName}" exceeds max rarity, skipping multi-copy`);
+        continue;
+      }
+
+      // Step 8: Create copies with unique IDs
+      const copies: ScryfallCard[] = [];
+      for (let i = 0; i < copiesToAdd; i++) {
+        copies.push({ ...card, id: `${card.id}-multi-${i}` });
+      }
+
+      console.log(`[DeckGen] Adding ${copiesToAdd} copies of "${cardName}" (scaled from ${quantity} in 100-card to ${finalQuantity} in ${deckSize}-card deck)`);
+      results.push({ card, copies });
+    } catch (error) {
+      console.warn(`[DeckGen] Failed to fetch "${cardName}" for multi-copy:`, error);
+    }
+  }
+
+  return results;
+}
+
 // Count color pips across all cards' mana costs (including hybrid mana)
 function countColorPips(cards: ScryfallCard[]): Record<string, number> {
   const pips: Record<string, number> = {};
@@ -1177,6 +1297,55 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
   if (budgetTracker && mustIncludeCards.length > 0) {
     budgetTracker.deductMustIncludes(mustIncludeCards);
   }
+
+  // ---- Multi-copy card pipeline (self-contained, no impact if nothing found) ----
+  if (edhrecData) {
+    const allEdhrecNames = edhrecData.cardlists.allNonLand.map(c => c.name);
+    const firstThemeSlug = selectedThemesWithSlugs.length > 0 ? selectedThemesWithSlugs[0].slug : undefined;
+    const multiCopyResults = await resolveMultiCopyCards(
+      allEdhrecNames,
+      commander.name,
+      firstThemeSlug,
+      usedNames,
+      format === 99 ? 100 : format, // EDHREC uses 100-card decks
+      bannedCards,
+      maxCardPrice,
+      maxRarity,
+    );
+
+    for (const { card, copies } of multiCopyResults) {
+      // Categorize by front-face type (same pattern as must-includes)
+      const typeLine = getFrontFaceTypeLine(card).toLowerCase();
+      if (typeLine.includes('creature')) {
+        categories.creatures.push(...copies);
+      } else if (typeLine.includes('instant')) {
+        categorizeInstants(copies, categories);
+      } else if (typeLine.includes('sorcery')) {
+        categorizeSorceries(copies, categories);
+      } else if (typeLine.includes('artifact')) {
+        categorizeArtifacts(copies, categories);
+      } else if (typeLine.includes('enchantment')) {
+        categorizeEnchantments(copies, categories);
+      } else {
+        categories.synergy.push(...copies);
+      }
+
+      // Update curve counts
+      const cmc = Math.min(Math.floor(card.cmc), 7);
+      currentCurveCounts[cmc] = (currentCurveCounts[cmc] ?? 0) + copies.length;
+
+      // Deduct from budget
+      if (budgetTracker) {
+        for (const copy of copies) {
+          budgetTracker.deductCard(copy);
+        }
+      }
+
+      // Prevent normal selection from picking this card again
+      usedNames.add(card.name);
+    }
+  }
+  // ---- End multi-copy pipeline ----
 
   // If we have EDHREC data, use it as the primary source with CMC-aware selection
   if (edhrecData && edhrecData.cardlists.allNonLand.length > 0) {

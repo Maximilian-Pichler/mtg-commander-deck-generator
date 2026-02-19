@@ -27,7 +27,9 @@
       "Bash(NODE_OPTIONS=\"\" node:*)",
       "Bash(npx --no-install tsc:*)",
       "Bash(ls:*)",
-      "Bash(node \"a:/Coding/MtgMakeDeckForMe/node_modules/typescript/bin/tsc\":*)"
+      "Bash(node \"a:/Coding/MtgMakeDeckForMe/node_modules/typescript/bin/tsc\":*)",
+      "Bash(node ./node_modules/.bin/vite build:*)",
+      "Bash(node:*)"
     ]
   }
 }

@@ -104,14 +104,8 @@ export function ArchetypeDisplay() {
     setShowOtherDropdown(!showOtherDropdown);
   };
 
-  // Handle clicking back on an EDHREC theme (deselects "Other")
   const handleThemeClick = (themeName: string) => {
     toggleThemeSelection(themeName);
-    // If selecting a theme, close the Other dropdown
-    const theme = selectedThemes.find((t) => t.name === themeName);
-    if (theme && !theme.isSelected) {
-      setShowOtherDropdown(false);
-    }
   };
 
   return (
@@ -132,7 +126,7 @@ export function ArchetypeDisplay() {
                 name={theme.name}
                 popularityPercent={theme.popularityPercent}
                 deckCount={theme.deckCount}
-                isSelected={theme.isSelected && !showOtherDropdown}
+                isSelected={theme.isSelected}
                 onClick={() => handleThemeClick(theme.name)}
               />
             ))}
@@ -144,7 +138,7 @@ export function ArchetypeDisplay() {
                 px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 transition-all
                 border cursor-pointer
                 ${
-                  showOtherDropdown
+                  showOtherDropdown || selectedThemes.slice(8).some(t => t.isSelected)
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-accent/50 hover:bg-accent border-transparent hover:border-primary/30'
                 }
@@ -190,6 +184,18 @@ export function ArchetypeDisplay() {
               {selectedThemes.some(t => t.isSelected)
                 ? `Building with: ${selectedThemes.filter(t => t.isSelected).map(t => t.name).join(', ')} · Unselect all for top cards`
                 : 'No themes selected — will use top recommended cards for this commander'}
+            </p>
+          )}
+
+          {selectedThemes.some(t => t.isSelected) &&
+            selectedThemes.filter(t => t.isSelected).reduce((sum, t) => sum + (t.deckCount ?? 0), 0) < 50 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+              </svg>
+              Low deck count for selected themes — results may be inconsistent
             </p>
           )}
         </div>

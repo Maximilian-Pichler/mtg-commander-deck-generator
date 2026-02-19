@@ -1,7 +1,7 @@
 {
   "name": "mtg-deck-builder",
   "private": true,
-  "version": "1.0.13",
+  "version": "1.0.14",
   "type": "module",
   "scripts": {
     "dev": "vite",

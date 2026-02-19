@@ -13,7 +13,7 @@ import type {
   EDHRECCommanderStats,
   MaxRarity,
 } from '@/types';
-import { searchCards, getCardByName, getCardsByNames, prefetchBasicLands, getCachedCard, getGameChangerNames, getCardPrice } from '@/services/scryfall/client';
+import { searchCards, getCardByName, getCardsByNames, prefetchBasicLands, getCachedCard, getGameChangerNames, getCardPrice, getFrontFaceTypeLine } from '@/services/scryfall/client';
 import { fetchCommanderData, fetchCommanderThemeData, fetchPartnerCommanderData, fetchPartnerThemeData } from '@/services/edhrec/client';
 import {
   calculateTypeTargets,
@@ -179,8 +179,8 @@ function exceedsMaxRarity(card: ScryfallCard, maxRarity: MaxRarity): boolean {
 // Check if a non-land card exceeds the CMC cap (for Tiny Leaders)
 function exceedsCmcCap(card: ScryfallCard, maxCmc: number | null): boolean {
   if (maxCmc === null) return false;
-  // Lands are never filtered by CMC
-  if (card.type_line?.toLowerCase().includes('land')) return false;
+  // Lands are never filtered by CMC (use front face for MDFCs)
+  if (getFrontFaceTypeLine(card).toLowerCase().includes('land')) return false;
   return card.cmc > maxCmc;
 }
 
@@ -379,7 +379,7 @@ function pickFromPrefetchedWithCurve(
       // Type check for Unknown cards (need to verify they match expected type via Scryfall)
       // Cards already categorized by EDHREC (primary_type !== 'Unknown') skip this check
       if (requireTypeCheckForUnknown && edhrecCard.primary_type === 'Unknown' && expectedType) {
-        if (!matchesExpectedType(scryfallCard.type_line, expectedType)) {
+        if (!matchesExpectedType(getFrontFaceTypeLine(scryfallCard), expectedType)) {
           continue;
         }
       }
@@ -814,7 +814,7 @@ async function generateLands(
 function calculateStats(categories: Record<DeckCategory, ScryfallCard[]>): DeckStats {
   const allCards = Object.values(categories).flat();
   const nonLandCards = allCards.filter(
-    (card) => !card.type_line?.toLowerCase().includes('land')
+    (card) => !getFrontFaceTypeLine(card).toLowerCase().includes('land')
   );
 
   // Mana curve
@@ -841,10 +841,10 @@ function calculateStats(categories: Record<DeckCategory, ScryfallCard[]>): DeckS
     }
   });
 
-  // Type distribution
+  // Type distribution (use front face for MDFCs like "Instant // Land")
   const typeDistribution: Record<string, number> = {};
   allCards.forEach((card) => {
-    const typeLine = card.type_line?.toLowerCase() || '';
+    const typeLine = getFrontFaceTypeLine(card).toLowerCase();
     if (typeLine.includes('creature')) typeDistribution['Creature'] = (typeDistribution['Creature'] || 0) + 1;
     else if (typeLine.includes('instant')) typeDistribution['Instant'] = (typeDistribution['Instant'] || 0) + 1;
     else if (typeLine.includes('sorcery')) typeDistribution['Sorcery'] = (typeDistribution['Sorcery'] || 0) + 1;
@@ -1006,8 +1006,8 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
       card.isMustInclude = true;
       addedCount++;
 
-      // Categorize by type
-      const typeLine = card.type_line.toLowerCase();
+      // Categorize by front face type (handles MDFCs like "Instant // Land")
+      const typeLine = getFrontFaceTypeLine(card).toLowerCase();
       if (typeLine.includes('land')) {
         categories.lands.push(card);
       } else if (typeLine.includes('creature')) {
@@ -1168,7 +1168,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
 
   // Create budget tracker if deck budget is set
   const mustIncludeCards = Object.values(categories).flat();
-  const nonLandSlotsTotal = totalTypeTargets - mustIncludeCards.filter(c => !c.type_line?.toLowerCase().includes('land')).length;
+  const nonLandSlotsTotal = totalTypeTargets - mustIncludeCards.filter(c => !getFrontFaceTypeLine(c).toLowerCase().includes('land')).length;
   const budgetTracker = deckBudget !== null
     ? new BudgetTracker(deckBudget, nonLandSlotsTotal + (customization.nonBasicLandCount ?? 15))
     : null;

@@ -383,6 +383,15 @@ export function getCardPrice(card: ScryfallCard): string | null {
   return p?.usd || p?.usd_foil || p?.usd_etched || p?.eur || p?.eur_foil || null;
 }
 
+// Get the front face type_line for a card.
+// MDFCs have type_line like "Instant // Land" — this returns only "Instant" (the front face).
+export function getFrontFaceTypeLine(card: ScryfallCard): string {
+  if (card.card_faces && card.card_faces.length >= 2 && card.card_faces[0]?.type_line) {
+    return card.card_faces[0].type_line;
+  }
+  return card.type_line || '';
+}
+
 // Check if a card is double-faced (has separate face images)
 export function isDoubleFacedCard(card: ScryfallCard): boolean {
   return !card.image_uris && !!card.card_faces && card.card_faces.length >= 2

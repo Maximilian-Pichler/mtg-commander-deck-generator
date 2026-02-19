@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
-import { getCardImageUrl, isDoubleFacedCard, getCardBackFaceUrl, getCardPrice } from '@/services/scryfall/client';
+import { getCardImageUrl, isDoubleFacedCard, getCardBackFaceUrl, getCardPrice, getFrontFaceTypeLine } from '@/services/scryfall/client';
 import { getDeckFormatConfig } from '@/lib/constants/archetypes';
 import type { ScryfallCard } from '@/types';
 import {
@@ -12,6 +12,7 @@ import {
   Grid3X3,
   List,
   ArrowUpDown,
+  Search,
 } from 'lucide-react';
 import { CardTypeIcon, ManaCost } from '@/components/ui/mtg-icons';
 
@@ -28,7 +29,7 @@ function cardMatchesFilter(card: ScryfallCard, filter: StatsFilter): boolean {
 
   switch (filter.type) {
     case 'cmc': {
-      if (card.type_line?.toLowerCase().includes('land')) return false;
+      if (getFrontFaceTypeLine(card).toLowerCase().includes('land')) return false;
       const cardCmc = Math.min(Math.floor(card.cmc), 7);
       return cardCmc === filter.value;
     }
@@ -81,17 +82,17 @@ type CardType = 'Commander' | 'Creature' | 'Planeswalker' | 'Instant' | 'Sorcery
 
 const TYPE_ORDER: CardType[] = ['Commander', 'Planeswalker', 'Creature', 'Artifact', 'Enchantment', 'Instant', 'Sorcery', 'Land'];
 
-// Get primary card type from type_line
+// Get primary card type from front face type_line (handles MDFCs like "Instant // Land")
 function getCardType(card: ScryfallCard): CardType {
-  const typeLine = card.type_line?.toLowerCase() || '';
+  const typeLine = getFrontFaceTypeLine(card).toLowerCase();
 
-  if (typeLine.includes('land')) return 'Land';
-  if (typeLine.includes('planeswalker')) return 'Planeswalker';
   if (typeLine.includes('creature')) return 'Creature';
+  if (typeLine.includes('planeswalker')) return 'Planeswalker';
   if (typeLine.includes('instant')) return 'Instant';
   if (typeLine.includes('sorcery')) return 'Sorcery';
   if (typeLine.includes('artifact')) return 'Artifact';
   if (typeLine.includes('enchantment')) return 'Enchantment';
+  if (typeLine.includes('land')) return 'Land';
 
   return 'Artifact'; // Default fallback
 }
@@ -584,7 +585,7 @@ function DeckStats({ activeFilter, onFilterChange }: DeckStatsProps) {
 
   // Get all cards for mana calculations
   const allCards = Object.values(categories).flat();
-  const nonLandCards = allCards.filter(c => !c.type_line?.toLowerCase().includes('land'));
+  const nonLandCards = allCards.filter(c => !getFrontFaceTypeLine(c).toLowerCase().includes('land'));
 
   // Calculate mana pips and production
   const manaPips = calculateManaPips(nonLandCards);
@@ -781,6 +782,7 @@ export function DeckDisplay() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortBy, setSortBy] = useState<'name' | 'cmc' | 'price'>('name');
   const [statsFilter, setStatsFilter] = useState<StatsFilter>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleStatsFilterChange = useCallback((newFilter: StatsFilter) => {
     setStatsFilter(prev => {
@@ -878,6 +880,36 @@ export function DeckDisplay() {
     return ids;
   }, [statsFilter, groupedCards]);
 
+  // Build set of card IDs matching the search query (name or oracle text)
+  const searchMatchingIds = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return null;
+    const allGrouped = Object.values(groupedCards).flat();
+    const ids = new Set<string>();
+    for (const { card } of allGrouped) {
+      const name = card.name?.toLowerCase() || '';
+      const oracleText = card.oracle_text?.toLowerCase() || '';
+      const faceTexts = card.card_faces?.map(f => `${f.name?.toLowerCase() || ''} ${f.oracle_text?.toLowerCase() || ''}`).join(' ') || '';
+      if (name.includes(query) || oracleText.includes(query) || faceTexts.includes(query)) {
+        ids.add(card.id);
+      }
+    }
+    return ids;
+  }, [searchQuery, groupedCards]);
+
+  // Combine stats filter and search filter into a single set of matching IDs
+  const combinedMatchingIds = useMemo(() => {
+    if (!matchingCardIds && !searchMatchingIds) return null;
+    if (!matchingCardIds) return searchMatchingIds;
+    if (!searchMatchingIds) return matchingCardIds;
+    // Intersection: card must match both filters
+    const ids = new Set<string>();
+    for (const id of matchingCardIds) {
+      if (searchMatchingIds.has(id)) ids.add(id);
+    }
+    return ids;
+  }, [matchingCardIds, searchMatchingIds]);
+
   const handleHover = (card: ScryfallCard | null, e?: React.MouseEvent, showBack?: boolean) => {
     if (card && e) {
       setHoverCard({ card, position: { x: e.clientX, y: e.clientY }, showBack });
@@ -916,7 +948,7 @@ export function DeckDisplay() {
     <>
       <div className="animate-slide-up">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+        <div className={`flex items-center justify-between mb-4 flex-wrap gap-4 ${searchQuery ? 'sticky top-[73px] z-30 bg-background/95 backdrop-blur-sm py-3 -mx-1 px-1 border-b border-border/30' : ''}`}>
           <div className="flex items-center gap-4">
             {/* Sort */}
             <div className="flex items-center gap-2 bg-card/50 rounded-lg px-3 py-1.5 border border-border/50">
@@ -947,6 +979,33 @@ export function DeckDisplay() {
               >
                 <List className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* Search */}
+            <div className="relative flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search cards..."
+                  className="bg-card/50 border border-border/50 rounded-lg pl-8 pr-8 py-1.5 text-xs w-48 focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {searchMatchingIds && (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {searchMatchingIds.size} match{searchMatchingIds.size !== 1 ? 'es' : ''}
+                </span>
+              )}
             </div>
           </div>
 
@@ -996,7 +1055,7 @@ export function DeckDisplay() {
                     cards={groupedCards[type] || []}
                     onPreview={setPreviewCard}
                     onHover={handleHover}
-                    matchingCardIds={matchingCardIds}
+                    matchingCardIds={combinedMatchingIds}
                   />
                 ))}
               </div>
@@ -1004,7 +1063,7 @@ export function DeckDisplay() {
               <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                 {TYPE_ORDER.flatMap((type) =>
                   (groupedCards[type] || []).map(({ card, quantity }) => {
-                    const dimmed = matchingCardIds !== null && !matchingCardIds.has(card.id);
+                    const dimmed = combinedMatchingIds !== null && !combinedMatchingIds.has(card.id);
                     return (
                       <button
                         key={card.id}

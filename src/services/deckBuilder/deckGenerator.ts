@@ -1821,6 +1821,7 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
         if (!fitsColorIdentity(scryfallCard, colorIdentity)) continue;
         if (exceedsMaxPrice(scryfallCard, shortagePriceCap)) continue;
         if (exceedsMaxRarity(scryfallCard, maxRarity)) continue;
+        if (exceedsCmcCap(scryfallCard, maxCmc)) continue;
 
         categories.synergy.push(scryfallCard);
         usedNames.add(edhrecCard.name);

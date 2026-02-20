@@ -30,7 +30,8 @@
       "Bash(node \"a:/Coding/MtgMakeDeckForMe/node_modules/typescript/bin/tsc\":*)",
       "Bash(node ./node_modules/.bin/vite build:*)",
       "Bash(node:*)",
-      "WebFetch(domain:edhrec.com)"
+      "WebFetch(domain:edhrec.com)",
+      "WebFetch(domain:scryfall.com)"
     ]
   }
 }

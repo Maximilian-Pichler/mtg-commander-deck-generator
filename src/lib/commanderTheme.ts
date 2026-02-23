@@ -9,61 +9,63 @@ const MTG_COLORS: Record<string, string> = {
   GOLD: '42 50% 35%', // Muted bronze for 3+ colors
 };
 
-// Vibrant versions for --primary (buttons, toggles, selected states)
-const MTG_PRIMARY: Record<string, string> = {
-  W: '45 65% 50%',    // Bright amber/gold
-  U: '210 70% 50%',   // Bright blue
-  B: '270 50% 45%',   // Bright violet
-  R: '0 70% 48%',     // Bright red
-  G: '150 55% 38%',   // Bright green
-  C: '220 15% 48%',   // Bright slate
-  GOLD: '42 65% 48%', // Bright gold
+// Curated border colors for each 2-color guild pair (both orderings for safety)
+const GUILD_BORDER: Record<string, string> = {
+  'WU': '210 50% 40%',   // Azorius - steel blue
+  'UW': '210 50% 40%',
+  'WB': '260 20% 35%',   // Orzhov - pale silver-violet
+  'BW': '260 20% 35%',
+  'WR': '25 50% 40%',    // Boros - warm bronze
+  'RW': '25 50% 40%',
+  'WG': '85 40% 35%',    // Selesnya - verdant gold
+  'GW': '85 40% 35%',
+  'UB': '235 40% 35%',   // Dimir - deep indigo
+  'BU': '235 40% 35%',
+  'UR': '265 45% 40%',   // Izzet - electric purple
+  'RU': '265 45% 40%',
+  'UG': '180 45% 35%',   // Simic - biotech teal
+  'GU': '180 45% 35%',
+  'BR': '350 45% 38%',   // Rakdos - blood crimson
+  'RB': '350 45% 38%',
+  'BG': '140 30% 30%',   // Golgari - mossy dark green
+  'GB': '140 30% 30%',
+  'RG': '28 50% 38%',    // Gruul - savage amber
+  'GR': '28 50% 38%',
 };
 
-// Curated primary colors for each 2-color guild pair (WUBRG order keys)
-const GUILD_PRIMARY: Record<string, string> = {
-  'WU': '210 60% 52%',   // Azorius - cool blue with white brightness
-  'WB': '260 20% 50%',   // Orzhov - pale silver-violet
-  'WR': '25 70% 50%',    // Boros - warm sunfire gold
-  'WG': '85 50% 42%',    // Selesnya - verdant gold
-  'UB': '235 50% 48%',   // Dimir - deep indigo
-  'UR': '265 65% 52%',   // Izzet - electric purple
-  'UG': '180 55% 40%',   // Simic - biotech teal
-  'BR': '350 60% 44%',   // Rakdos - blood crimson
-  'BG': '140 35% 36%',   // Golgari - mossy dark green
-  'RG': '28 65% 46%',    // Gruul - savage amber
-};
+// WUBRG sort order for consistent color ordering
+const WUBRG_ORDER = ['W', 'U', 'B', 'R', 'G'];
+function sortWUBRG(colors: string[]): string[] {
+  return [...colors].sort((a, b) => WUBRG_ORDER.indexOf(a) - WUBRG_ORDER.indexOf(b));
+}
 
 // Default theme values
-const DEFAULT_PRIMARY = '262 83% 58%';
 const DEFAULT_RING = '262 83% 58%';
 const DEFAULT_BORDER = '220 13% 20%';
 
 export function applyCommanderTheme(colors: string[]) {
   const root = document.documentElement;
+  const sorted = sortWUBRG(colors);
 
-  if (colors.length === 0) {
+  if (sorted.length === 0) {
     // Colorless
-    root.style.setProperty('--primary', MTG_PRIMARY['C']);
     root.style.setProperty('--ring', MTG_COLORS['C']);
     root.style.setProperty('--border', MTG_COLORS['C']);
-  } else if (colors.length === 1) {
+  } else if (sorted.length === 1) {
     // Mono-color
-    root.style.setProperty('--primary', MTG_PRIMARY[colors[0]]);
-    root.style.setProperty('--ring', MTG_COLORS[colors[0]]);
-    root.style.setProperty('--border', MTG_COLORS[colors[0]]);
-  } else if (colors.length === 2) {
-    // 2-color: use curated guild color for primary
-    const key = colors.join('');
-    root.style.setProperty('--primary', GUILD_PRIMARY[key] || MTG_PRIMARY[colors[0]]);
-    root.style.setProperty('--ring', MTG_COLORS[colors[0]]);
-    root.style.setProperty('--border', MTG_COLORS[colors[0]]);
-    root.style.setProperty('--gradient-start', `hsl(${MTG_COLORS[colors[0]]})`);
-    root.style.setProperty('--gradient-end', `hsl(${MTG_COLORS[colors[1]]})`);
+    root.style.setProperty('--ring', MTG_COLORS[sorted[0]]);
+    root.style.setProperty('--border', MTG_COLORS[sorted[0]]);
+  } else if (sorted.length === 2) {
+    // 2-color: use curated guild border color
+    const key = sorted.join('');
+    const borderColor = GUILD_BORDER[key] || MTG_COLORS[sorted[0]];
+    root.style.setProperty('--ring', borderColor);
+    root.style.setProperty('--border', borderColor);
+    root.style.setProperty('--gradient-start', `hsl(${MTG_COLORS[sorted[0]]})`);
+    root.style.setProperty('--gradient-end', `hsl(${MTG_COLORS[sorted[1]]})`);
     root.classList.add('commander-gradient');
   } else {
     // 3+ colors: gold/multicolor
-    root.style.setProperty('--primary', MTG_PRIMARY['GOLD']);
     root.style.setProperty('--ring', MTG_COLORS['GOLD']);
     root.style.setProperty('--border', MTG_COLORS['GOLD']);
   }
@@ -71,7 +73,6 @@ export function applyCommanderTheme(colors: string[]) {
 
 export function resetTheme() {
   const root = document.documentElement;
-  root.style.setProperty('--primary', DEFAULT_PRIMARY);
   root.style.setProperty('--ring', DEFAULT_RING);
   root.style.setProperty('--border', DEFAULT_BORDER);
   root.style.removeProperty('--gradient-start');

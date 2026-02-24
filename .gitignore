@@ -35,3 +35,7 @@ coverage
 
 # TypeScript
 *.tsbuildinfo
+
+# CDK
+cdk.out
+*.d.ts.map

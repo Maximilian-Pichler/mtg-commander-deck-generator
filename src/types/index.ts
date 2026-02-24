@@ -311,6 +311,7 @@ export interface Customization {
   collectionMode: boolean; // When true, constrain generation to owned cards
   comboCount: number; // 0 = none, 1 = a few, 2 = many combo pieces prioritized
   hyperFocus: boolean; // When true, boost unique theme cards and penalize generic multi-theme cards
+  currency: 'USD' | 'EUR'; // Price currency for budget filtering and display
 }
 
 // Store state

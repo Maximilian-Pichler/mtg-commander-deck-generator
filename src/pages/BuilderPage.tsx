@@ -374,6 +374,7 @@ export function BuilderPage() {
         nonBasicLandCount: customization.nonBasicLandCount,
         mustIncludeCount: customization.mustIncludeCards.length,
         bannedCount: customization.bannedCards.length,
+        currency: customization.currency,
       });
     } catch (error) {
       console.error('Generation error:', error);

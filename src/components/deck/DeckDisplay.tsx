@@ -102,11 +102,11 @@ function getCardType(card: ScryfallCard): CardType {
 }
 
 // Format price
-function formatPrice(price: string | null | undefined): string {
+function formatPrice(price: string | null | undefined, sym = '$'): string {
   if (!price) return '-';
   const num = parseFloat(price);
   if (isNaN(num)) return '-';
-  return `$${num.toFixed(2)}`;
+  return `${sym}${num.toFixed(2)}`;
 }
 
 // Card row component
@@ -117,11 +117,12 @@ interface CardRowProps {
   onHover: (card: ScryfallCard | null, e?: React.MouseEvent, showBack?: boolean) => void;
   dimmed?: boolean;
   avgCardPrice?: number | null;
+  currency?: 'USD' | 'EUR';
 }
 
-function CardRow({ card, quantity, onPreview, onHover, dimmed, avgCardPrice }: CardRowProps) {
-  const rawPrice = getCardPrice(card);
-  const price = formatPrice(rawPrice);
+function CardRow({ card, quantity, onPreview, onHover, dimmed, avgCardPrice, currency = 'USD' }: CardRowProps) {
+  const rawPrice = getCardPrice(card, currency);
+  const price = formatPrice(rawPrice, currency === 'EUR' ? '€' : '$');
   const isDfc = isDoubleFacedCard(card);
   const priceNum = parseFloat(rawPrice || '0');
   const isPriceOutlier = avgCardPrice != null &&
@@ -177,16 +178,18 @@ interface CategoryColumnProps {
   onHover: (card: ScryfallCard | null, e?: React.MouseEvent, showBack?: boolean) => void;
   matchingCardIds: Set<string> | null;
   avgCardPrice?: number | null;
+  currency?: 'USD' | 'EUR';
 }
 
-function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds, avgCardPrice }: CategoryColumnProps) {
+function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds, avgCardPrice, currency = 'USD' }: CategoryColumnProps) {
   const [animateRef] = useAutoAnimate({ duration: 200 });
 
   if (cards.length === 0) return null;
 
+  const sym = currency === 'EUR' ? '€' : '$';
   const totalCards = cards.reduce((sum, c) => sum + c.quantity, 0);
   const totalPrice = cards.reduce((sum, c) => {
-    const price = parseFloat(getCardPrice(c.card) || '0');
+    const price = parseFloat(getCardPrice(c.card, currency) || '0');
     return sum + (isNaN(price) ? 0 : price * c.quantity);
   }, 0);
 
@@ -202,7 +205,7 @@ function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds, avgC
         </div>
         {totalPrice > 0 && (
           <span className="text-muted-foreground text-xs">
-            ${totalPrice.toFixed(2)}
+            {sym}{totalPrice.toFixed(2)}
           </span>
         )}
       </div>
@@ -218,6 +221,7 @@ function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds, avgC
             onHover={onHover}
             dimmed={matchingCardIds !== null && !matchingCardIds.has(card.id)}
             avgCardPrice={avgCardPrice}
+            currency={currency}
           />
         ))}
       </div>
@@ -787,8 +791,8 @@ export function DeckDisplay() {
         if (sortBy === 'name') return a.card.name.localeCompare(b.card.name);
         if (sortBy === 'cmc') return a.card.cmc - b.card.cmc;
         if (sortBy === 'price') {
-          const priceA = parseFloat(getCardPrice(a.card) || '0');
-          const priceB = parseFloat(getCardPrice(b.card) || '0');
+          const priceA = parseFloat(getCardPrice(a.card, customization.currency) || '0');
+          const priceB = parseFloat(getCardPrice(b.card, customization.currency) || '0');
           return priceB - priceA;
         }
         return 0;
@@ -873,9 +877,10 @@ export function DeckDisplay() {
   const allGroupedCards = Object.values(groupedCards).flat();
   const totalCards = allGroupedCards.reduce((sum, c) => sum + c.quantity, 0);
   const totalPrice = allGroupedCards.reduce((sum, c) => {
-    const price = parseFloat(getCardPrice(c.card) || '0');
+    const price = parseFloat(getCardPrice(c.card, customization.currency) || '0');
     return sum + (isNaN(price) ? 0 : price * c.quantity);
   }, 0);
+  const sym = customization.currency === 'EUR' ? '€' : '$';
 
   const budgetActive = customization.maxCardPrice !== null ||
     customization.deckBudget !== null ||
@@ -949,7 +954,7 @@ export function DeckDisplay() {
 
           <div className="flex items-center gap-4">
             <div className="text-sm text-muted-foreground">
-              {totalCards} cards · ${totalPrice.toFixed(2)}
+              {totalCards} cards · {sym}{totalPrice.toFixed(2)}
               {generatedDeck.builtFromCollection && (
                 <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                   <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
@@ -962,8 +967,8 @@ export function DeckDisplay() {
                 <span className="ml-1 text-xs">
                   ({[
                     customization.budgetOption === 'budget' ? 'Budget' : customization.budgetOption === 'expensive' ? 'Expensive' : null,
-                    customization.maxCardPrice !== null ? `<$${customization.maxCardPrice}/card` : null,
-                    customization.deckBudget !== null ? `${totalPrice > customization.deckBudget ? '~' : ''}$${customization.deckBudget} budget, excludes commander` : null,
+                    customization.maxCardPrice !== null ? `<${sym}${customization.maxCardPrice}/card` : null,
+                    customization.deckBudget !== null ? `${totalPrice > customization.deckBudget ? '~' : ''}${sym}${customization.deckBudget} budget, excludes commander` : null,
                   ].filter(Boolean).join(' · ')})
                 </span>
               )}
@@ -1011,6 +1016,7 @@ export function DeckDisplay() {
                     onHover={handleHover}
                     matchingCardIds={combinedMatchingIds}
                     avgCardPrice={avgCardPrice}
+                    currency={customization.currency}
                   />
                 ))}
               </div>

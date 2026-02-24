@@ -380,9 +380,10 @@ export function getCardImageUrl(
  */
 const BASIC_LAND_NAMES = new Set(['Plains', 'Island', 'Swamp', 'Mountain', 'Forest', 'Wastes']);
 
-export function getCardPrice(card: ScryfallCard): string | null {
+export function getCardPrice(card: ScryfallCard, currency: 'USD' | 'EUR' = 'USD'): string | null {
   if (BASIC_LAND_NAMES.has(card.name)) return '0.05';
   const p = card.prices;
+  if (currency === 'EUR') return p?.eur || p?.eur_foil || p?.usd || p?.usd_foil || p?.usd_etched || null;
   return p?.usd || p?.usd_foil || p?.usd_etched || p?.eur || p?.eur_foil || null;
 }
 

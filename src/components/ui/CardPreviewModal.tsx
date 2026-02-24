@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { getCardImageUrl, isDoubleFacedCard, getCardBackFaceUrl, getCardPrice } from '@/services/scryfall/client';
 import type { ScryfallCard } from '@/types';
+import { useStore } from '@/store';
 
 interface CardPreviewModalProps {
   card: ScryfallCard | null;
@@ -11,6 +12,8 @@ interface CardPreviewModalProps {
 }
 
 export function CardPreviewModal({ card, onClose, onBuildDeck }: CardPreviewModalProps) {
+  const currency = useStore((s) => s.customization.currency);
+  const sym = currency === 'EUR' ? '€' : '$';
   const [showBack, setShowBack] = useState(false);
 
   // Reset flip state when card changes
@@ -68,8 +71,8 @@ export function CardPreviewModal({ card, onClose, onBuildDeck }: CardPreviewModa
         <div className="mt-4 text-center">
           <h3 className="text-white font-bold text-lg">{faceName}</h3>
           <p className="text-white/70 text-sm">{faceType}</p>
-          {getCardPrice(card) && (
-            <p className="text-white/50 text-xs mt-1">${getCardPrice(card)}</p>
+          {getCardPrice(card, currency) && (
+            <p className="text-white/50 text-xs mt-1">{sym}{getCardPrice(card, currency)}</p>
           )}
           <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
             {onBuildDeck && card.type_line && /legendary/i.test(card.type_line) && /creature/i.test(card.type_line) && (

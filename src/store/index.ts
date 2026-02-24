@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import type { AppState, Customization, ArchetypeResult, Archetype, ScryfallCard, GeneratedDeck, EDHRECTheme, ThemeResult } from '@/types';
+import { isEuropean } from '@/lib/region';
 
 const BANNED_CARDS_KEY = 'mtg-deck-builder-banned-cards';
 const MUST_INCLUDE_CARDS_KEY = 'mtg-deck-builder-must-include-cards';
+const CURRENCY_KEY = 'mtg-deck-builder-currency';
 
 // Load banned cards from localStorage
 function loadBannedCards(): string[] {
@@ -54,6 +56,26 @@ function saveMustIncludeCards(cards: string[]): void {
   }
 }
 
+// Load currency from localStorage, falling back to region detection
+function loadCurrency(): 'USD' | 'EUR' {
+  try {
+    const stored = localStorage.getItem(CURRENCY_KEY);
+    if (stored === 'USD' || stored === 'EUR') return stored;
+  } catch (e) {
+    console.warn('Failed to load currency from localStorage:', e);
+  }
+  return isEuropean() ? 'EUR' : 'USD';
+}
+
+// Save currency to localStorage
+function saveCurrency(currency: 'USD' | 'EUR'): void {
+  try {
+    localStorage.setItem(CURRENCY_KEY, currency);
+  } catch (e) {
+    console.warn('Failed to save currency to localStorage:', e);
+  }
+}
+
 const defaultCustomization: Customization = {
   deckFormat: 99,
   landCount: 37,
@@ -70,6 +92,7 @@ const defaultCustomization: Customization = {
   collectionMode: false,
   comboCount: 0,
   hyperFocus: false,
+  currency: loadCurrency(),
 };
 
 export const useStore = create<AppState>((set) => ({
@@ -181,6 +204,11 @@ export const useStore = create<AppState>((set) => ({
     // Persist must-include cards to localStorage when they change
     if (updates.mustIncludeCards !== undefined) {
       saveMustIncludeCards(newCustomization.mustIncludeCards);
+    }
+
+    // Persist currency to localStorage when it changes
+    if (updates.currency !== undefined) {
+      saveCurrency(newCustomization.currency);
     }
 
     return { customization: newCustomization };

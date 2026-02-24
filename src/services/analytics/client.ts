@@ -1,4 +1,5 @@
 import type { AnalyticsEventType, AnalyticsEventMetadata, AnalyticsEvent } from './types';
+import { getRegion } from '@/lib/region';
 
 const ANALYTICS_URL = import.meta.env.VITE_ANALYTICS_URL as string | undefined;
 const METRICS_SECRET = import.meta.env.VITE_METRICS_SECRET as string | undefined;
@@ -11,20 +12,6 @@ function getUserId(): string {
     return id;
   } catch {
     return 'unknown';
-  }
-}
-
-function getRegion(): string {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz.startsWith('America/')) return 'Americas';
-    if (tz.startsWith('Europe/')) return 'Europe';
-    if (tz.startsWith('Asia/')) return 'Asia';
-    if (tz.startsWith('Australia/') || tz.startsWith('Pacific/')) return 'Oceania';
-    if (tz.startsWith('Africa/')) return 'Africa';
-    return 'Other';
-  } catch {
-    return 'Other';
   }
 }
 

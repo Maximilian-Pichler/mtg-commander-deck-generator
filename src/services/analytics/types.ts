@@ -35,6 +35,7 @@ export interface AnalyticsEventMetadata {
     nonBasicLandCount: number;
     mustIncludeCount: number;
     bannedCount: number;
+    currency: string;
   };
   deck_generation_failed: { commanderName: string; error: string };
   deck_exported: { commanderName: string; format: 'clipboard' | 'download' };

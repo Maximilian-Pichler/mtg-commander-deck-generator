@@ -8,6 +8,9 @@ import { MustIncludeCards } from './MustIncludeCards';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { useCollection } from '@/hooks/useCollection';
 import { useNavigate } from 'react-router-dom';
+import { isEuropean } from '@/lib/region';
+
+const IS_EU = isEuropean() || location.hostname === 'localhost';
 
 
 export function DeckCustomizer() {
@@ -331,12 +334,13 @@ export function DeckCustomizer() {
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
             </svg>
             Budget Options
-            {!budgetOpen && (customization.budgetOption !== 'any' || customization.maxCardPrice !== null || customization.deckBudget !== null) && (
+            {!budgetOpen && (customization.budgetOption !== 'any' || customization.maxCardPrice !== null || customization.deckBudget !== null || customization.currency === 'EUR') && (
               <span className="text-[10px] font-normal text-primary bg-primary/20 px-1.5 py-0.5 rounded-full">
                 {[
                   customization.budgetOption !== 'any' ? customization.budgetOption : null,
-                  customization.maxCardPrice !== null ? `$${customization.maxCardPrice}/card` : null,
-                  customization.deckBudget !== null ? `$${customization.deckBudget} deck` : null,
+                  customization.maxCardPrice !== null ? `${customization.currency === 'EUR' ? '€' : '$'}${customization.maxCardPrice}/card` : null,
+                  customization.deckBudget !== null ? `${customization.currency === 'EUR' ? '€' : '$'}${customization.deckBudget} deck` : null,
+                  customization.currency === 'EUR' ? 'EUR' : null,
                 ].filter(Boolean).join(' · ')}
               </span>
             )}
@@ -363,7 +367,7 @@ export function DeckCustomizer() {
                   <InfoTooltip text="Sets a target budget for the deck (excluding commander). At low budgets, some expensive but high-synergy cards may be skipped in favor of cheaper alternatives. The final total may slightly exceed the target if needed to complete the deck." />
                 </label>
                 <span className="text-sm font-bold">
-                  {customization.deckBudget === null ? 'No limit' : `$${customization.deckBudget}`}
+                  {customization.deckBudget === null ? 'No limit' : `${customization.currency === 'EUR' ? '€' : '$'}${customization.deckBudget}`}
                 </span>
               </div>
               <div className="flex gap-2">
@@ -419,7 +423,7 @@ export function DeckCustomizer() {
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium">Max Card Price</label>
                 <span className="text-sm font-bold">
-                  {customization.maxCardPrice === null ? 'No limit' : `$${customization.maxCardPrice}`}
+                  {customization.maxCardPrice === null ? 'No limit' : `${customization.currency === 'EUR' ? '€' : '$'}${customization.maxCardPrice}`}
                 </span>
               </div>
               <div className="flex gap-2">
@@ -494,6 +498,38 @@ export function DeckCustomizer() {
                 ))}
               </div>
             </div>
+
+            {/* Region / Currency — only shown to European users */}
+            {IS_EU && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <label className="text-sm font-medium">Currency</label>
+                  <InfoTooltip text="We've detected you might be in Europe, so we've defaulted you to Euro prices. Switch to USD if you prefer." />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { code: 'USD', symbol: '$', label: 'US Dollar', flag: '🇺🇸' },
+                    { code: 'EUR', symbol: '€', label: 'Euro', flag: '🇪🇺' },
+                  ] as const).map((c) => {
+                    const active = customization.currency === c.code;
+                    return (
+                      <button
+                        key={c.code}
+                        onClick={() => updateCustomization({ currency: c.code })}
+                        className={`py-2 px-3 rounded-lg border text-center transition-colors flex items-center justify-center gap-2 ${
+                          active ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        <span className={`text-lg font-bold leading-none ${active ? 'text-primary' : 'text-foreground'}`}>{c.symbol}</span>
+                        <div className="text-left">
+                          <div className={`font-medium text-xs leading-tight ${active ? 'text-primary' : ''}`}>{c.code}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           </div>
         </div>

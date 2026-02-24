@@ -193,6 +193,16 @@ function Layout({ children }: { children: React.ReactNode }) {
               >
                 GitHub
               </a>
+              {' · '}
+              Support me on{' '}
+              <a
+                href="https://www.patreon.com/c/ShadowMonk598"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Patreon
+              </a>
             </p>
           </div>
         </footer>

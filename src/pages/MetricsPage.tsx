@@ -20,8 +20,10 @@ interface MetricsSummary {
   uniqueUserCount: number;
   eventCounts: Record<string, number>;
   commanderCounts: Record<string, number>;
-  archetypeCounts: Record<string, number>;
+  themeCounts: Record<string, number>;
   dailyCounts: Record<string, number>;
+  dailyBreakdown: Record<string, Record<string, number>>;
+  dailyUniqueUsers: Record<string, number>;
   regionCounts: Record<string, number>;
   featureAdoption: FeatureAdoption;
   settingsCounts: Record<string, Record<string, number>>;
@@ -74,6 +76,7 @@ export function MetricsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
+  const [dailyMetric, setDailyMetric] = useState<string>('total');
 
   useEffect(() => {
     let cancelled = false;
@@ -107,18 +110,31 @@ export function MetricsPage() {
     ? Object.entries(data.commanderCounts).sort(([, a], [, b]) => b - a).slice(0, 20)
     : [];
 
-  const sortedArchetypes = data
-    ? Object.entries(data.archetypeCounts).sort(([, a], [, b]) => b - a)
+  const sortedThemes = data
+    ? Object.entries(data.themeCounts ?? {}).sort(([, a], [, b]) => b - a)
     : [];
-  const maxArchetypeCount = sortedArchetypes.length > 0 ? sortedArchetypes[0][1] : 1;
+  const maxThemeCount = sortedThemes.length > 0 ? sortedThemes[0][1] : 1;
 
-  const sortedDays = data
-    ? Object.entries(data.dailyCounts).sort(([a], [b]) => a.localeCompare(b))
-    : [];
-  const maxDailyCount = sortedDays.length > 0 ? Math.max(...sortedDays.map(([, v]) => v)) : 1;
+  const DAILY_METRICS = [
+    { key: 'total', label: 'All Events' },
+    { key: 'unique_users', label: 'Unique Users' },
+    { key: 'deck_generated', label: 'Decks' },
+    { key: 'page_viewed', label: 'Page Views' },
+    { key: 'commander_searched', label: 'Searches' },
+  ];
+
+  const allDays = data ? Object.keys(data.dailyCounts).sort() : [];
+  const sortedDays: [string, number][] = allDays.map(day => {
+    let val = 0;
+    if (dailyMetric === 'total') val = data?.dailyCounts[day] ?? 0;
+    else if (dailyMetric === 'unique_users') val = data?.dailyUniqueUsers?.[day] ?? 0;
+    else val = data?.dailyBreakdown?.[day]?.[dailyMetric] ?? 0;
+    return [day, val];
+  });
+  const maxDailyCount = sortedDays.length > 0 ? Math.max(...sortedDays.map(([, v]) => v), 1) : 1;
 
   const sortedRegions = data
-    ? Object.entries(data.regionCounts).sort(([, a], [, b]) => b - a)
+    ? Object.entries(data.regionCounts ?? {}).sort(([, a], [, b]) => b - a)
     : [];
   const maxRegionCount = sortedRegions.length > 0 ? sortedRegions[0][1] : 1;
 
@@ -342,15 +358,15 @@ export function MetricsPage() {
             {/* Archetype Distribution */}
             <Card className="bg-card/80 backdrop-blur-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Archetype Distribution</CardTitle>
+                <CardTitle className="text-base">Theme Distribution</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {sortedArchetypes.map(([archetype, count]) => (
-                    <BarRow key={archetype} label={archetype} count={count} max={maxArchetypeCount} />
+                  {sortedThemes.map(([theme, count]) => (
+                    <BarRow key={theme} label={theme} count={count} max={maxThemeCount} />
                   ))}
-                  {sortedArchetypes.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No archetype data yet</p>
+                  {sortedThemes.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No theme data yet</p>
                   )}
                 </div>
               </CardContent>
@@ -358,18 +374,35 @@ export function MetricsPage() {
 
             {/* Daily Activity */}
             <Card className="bg-card/80 backdrop-blur-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Daily Activity</CardTitle>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Daily Activity</CardTitle>
+                  <div className="flex gap-1 bg-accent/50 rounded-md p-0.5">
+                    {DAILY_METRICS.map(m => (
+                      <button
+                        key={m.key}
+                        onClick={() => setDailyMetric(m.key)}
+                        className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                          dailyMetric === m.key
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                {sortedDays.length > 0 ? (
+                {sortedDays.length > 0 && sortedDays.some(([, v]) => v > 0) ? (
                   <div className="flex items-end gap-[2px] h-32">
                     {sortedDays.map(([day, count]) => (
                       <div
                         key={day}
                         className="flex-1 bg-primary/80 rounded-t-sm hover:bg-primary transition-colors group relative"
-                        style={{ height: `${(count / maxDailyCount) * 100}%`, minHeight: 2 }}
-                        title={`${day}: ${count} events`}
+                        style={{ height: `${(count / maxDailyCount) * 100}%`, minHeight: count > 0 ? 2 : 0 }}
+                        title={`${day}: ${count}`}
                       >
                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-muted-foreground opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">
                           {count}
@@ -378,7 +411,7 @@ export function MetricsPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No daily data yet</p>
+                  <p className="text-sm text-muted-foreground">No data yet for this metric</p>
                 )}
                 {sortedDays.length > 0 && (
                   <div className="flex justify-between text-[10px] text-muted-foreground mt-1">

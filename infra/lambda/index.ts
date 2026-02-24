@@ -94,8 +94,10 @@ async function handleGet(params: Record<string, string>) {
 
     const eventCounts: Record<string, number> = {};
     const commanderCounts: Record<string, number> = {};
-    const archetypeCounts: Record<string, number> = {};
+    const themeCounts: Record<string, number> = {};
     const dailyCounts: Record<string, number> = {};
+    const dailyBreakdown: Record<string, Record<string, number>> = {};
+    const dailyUserSets: Record<string, Set<string>> = {};
     const uniqueUsers = new Set<string>();
     const regionCounts: Record<string, number> = {};
     const featureAdoption = {
@@ -121,13 +123,21 @@ async function handleGet(params: Record<string, string>) {
 
       // Daily counts
       const day = item.timestamp?.slice(0, 10);
-      if (day) dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+      if (day) {
+        dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+        if (!dailyBreakdown[day]) dailyBreakdown[day] = {};
+        dailyBreakdown[day][item.event] = (dailyBreakdown[day][item.event] || 0) + 1;
+      }
 
       const meta = item.metadata as Record<string, unknown> | undefined;
 
-      // Unique users
+      // Unique users (global + per-day)
       if (meta?.userId && typeof meta.userId === 'string') {
         uniqueUsers.add(meta.userId);
+        if (day) {
+          if (!dailyUserSets[day]) dailyUserSets[day] = new Set();
+          dailyUserSets[day].add(meta.userId);
+        }
       }
 
       // Region
@@ -140,9 +150,13 @@ async function handleGet(params: Record<string, string>) {
         commanderCounts[meta.commanderName] = (commanderCounts[meta.commanderName] || 0) + 1;
       }
 
-      // Archetype distribution (from deck_generated events only)
-      if (item.event === 'deck_generated' && meta?.archetype && typeof meta.archetype === 'string') {
-        archetypeCounts[meta.archetype] = (archetypeCounts[meta.archetype] || 0) + 1;
+      // Theme distribution (from deck_generated events only)
+      if (item.event === 'deck_generated') {
+        if (Array.isArray(meta?.themes)) {
+          for (const theme of meta.themes as string[]) {
+            if (theme) themeCounts[theme] = (themeCounts[theme] || 0) + 1;
+          }
+        }
 
         // Feature adoption
         featureAdoption.deckCount++;
@@ -166,6 +180,11 @@ async function handleGet(params: Record<string, string>) {
       }
     }
 
+    const dailyUniqueUsers: Record<string, number> = {};
+    for (const [day, set] of Object.entries(dailyUserSets)) {
+      dailyUniqueUsers[day] = set.size;
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -173,8 +192,10 @@ async function handleGet(params: Record<string, string>) {
         uniqueUserCount: uniqueUsers.size,
         eventCounts,
         commanderCounts,
-        archetypeCounts,
+        themeCounts,
         dailyCounts,
+        dailyBreakdown,
+        dailyUniqueUsers,
         regionCounts,
         featureAdoption,
         settingsCounts,

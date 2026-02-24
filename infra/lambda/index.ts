@@ -115,6 +115,11 @@ async function handleGet(params: Record<string, string>) {
       bracketLevel: {},
       maxRarity: {},
       gameChangerLimit: {},
+      deckFormat: {},
+      comboPreference: {},
+      deckBudget: {},
+      maxCardPrice: {},
+      landCount: {},
     };
 
     for (const item of items) {
@@ -145,13 +150,12 @@ async function handleGet(params: Record<string, string>) {
         regionCounts[meta.region] = (regionCounts[meta.region] || 0) + 1;
       }
 
-      // Commander popularity
-      if (meta?.commanderName && typeof meta.commanderName === 'string') {
-        commanderCounts[meta.commanderName] = (commanderCounts[meta.commanderName] || 0) + 1;
-      }
-
-      // Theme distribution (from deck_generated events only)
+      // Theme distribution and commander counts (deck_generated events only)
       if (item.event === 'deck_generated') {
+        // Commander — count only actual deck generations
+        if (meta?.commanderName && typeof meta.commanderName === 'string') {
+          commanderCounts[meta.commanderName] = (commanderCounts[meta.commanderName] || 0) + 1;
+        }
         if (Array.isArray(meta?.themes)) {
           for (const theme of meta.themes as string[]) {
             if (theme) themeCounts[theme] = (themeCounts[theme] || 0) + 1;
@@ -177,6 +181,31 @@ async function handleGet(params: Record<string, string>) {
         if (meta.bracketLevel !== undefined) bucket('bracketLevel', meta.bracketLevel);
         bucket('maxRarity', meta.maxRarity ?? 'none');
         if (meta.gameChangerLimit !== undefined) bucket('gameChangerLimit', meta.gameChangerLimit);
+
+        // Deck format
+        if (meta.deckFormat !== undefined) {
+          const fmt = meta.deckFormat === 99 ? 'Commander' : meta.deckFormat === 60 ? 'Brawl' : 'Custom';
+          bucket('deckFormat', fmt);
+        }
+
+        // Combo preference slider (0=None, 1=A Few, 2=Many)
+        if (meta.comboPreference !== undefined) {
+          const comboLabels: Record<number, string> = { 0: 'None', 1: 'A Few', 2: 'Many' };
+          bucket('comboPreference', comboLabels[meta.comboPreference as number] ?? String(meta.comboPreference));
+        }
+
+        // Deck budget (null = none, else dollar value)
+        bucket('deckBudget', meta.deckBudget === null || meta.deckBudget === undefined ? 'None' : `$${meta.deckBudget}`);
+
+        // Max card price (null = none, else dollar value)
+        bucket('maxCardPrice', meta.maxCardPrice === null || meta.maxCardPrice === undefined ? 'None' : `$${meta.maxCardPrice}`);
+
+        // Land count (bucketed into ranges)
+        if (typeof meta.landCount === 'number') {
+          const lc = meta.landCount as number;
+          const landBucket = lc <= 33 ? '≤33 (Aggro)' : lc <= 36 ? '34-36' : lc === 37 ? '37 (Standard)' : lc <= 40 ? '38-40' : '41+ (Control)';
+          bucket('landCount', landBucket);
+        }
       }
     }
 

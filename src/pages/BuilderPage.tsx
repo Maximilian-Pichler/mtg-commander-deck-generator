@@ -361,6 +361,7 @@ export function BuilderPage() {
         totalCards: deck.stats.totalCards,
         averageCmc: deck.stats.averageCmc,
         comboCount: deck.detectedCombos?.length ?? 0,
+        comboPreference: customization.comboCount,
         budgetOption: customization.budgetOption,
         maxCardPrice: customization.maxCardPrice,
         deckBudget: customization.deckBudget,

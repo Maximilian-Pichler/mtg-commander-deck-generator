@@ -3,6 +3,7 @@ export type AnalyticsEventType =
   | 'commander_selected'
   | 'deck_generated'
   | 'deck_generation_failed'
+  | 'deck_exported'
   | 'theme_toggled'
   | 'collection_imported'
   | 'combos_viewed'
@@ -21,6 +22,7 @@ export interface AnalyticsEventMetadata {
     totalCards: number;
     averageCmc: number;
     comboCount: number;
+    comboPreference: number;
     budgetOption: string;
     maxCardPrice: number | null;
     deckBudget: number | null;
@@ -35,6 +37,7 @@ export interface AnalyticsEventMetadata {
     bannedCount: number;
   };
   deck_generation_failed: { commanderName: string; error: string };
+  deck_exported: { commanderName: string; format: 'clipboard' | 'download' };
   theme_toggled: { commanderName: string; themeName: string; selected: boolean };
   collection_imported: { cardCount: number; added: number; updated: number };
   combos_viewed: { commanderName: string; comboCount: number };

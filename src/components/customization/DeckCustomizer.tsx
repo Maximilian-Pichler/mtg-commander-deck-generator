@@ -642,7 +642,7 @@ export function DeckCustomizer() {
                   Combos
                   <InfoTooltip text="How aggressively to include combos from EDHREC's combo database. At 'No Additional', no combo cards are prioritized but any that naturally end up in the deck are still detected. Higher values increasingly favor including combo piece cards." />
                 </label>
-                <span className="text-sm font-bold">{(['None', 'A Few', 'Many'] as const)[customization.comboCount]}</span>
+                <span className="text-sm font-bold">{(['Normal', 'A Few Extra', 'Many'] as const)[customization.comboCount]}</span>
               </div>
               <Slider
                 value={customization.comboCount}
@@ -652,8 +652,8 @@ export function DeckCustomizer() {
                 onChange={(value) => updateCustomization({ comboCount: value })}
               />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>None</span>
-                <span>A Few</span>
+                <span>Normal</span>
+                <span>A Few Extra</span>
                 <span>Many</span>
               </div>
             </div>

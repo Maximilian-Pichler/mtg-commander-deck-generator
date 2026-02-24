@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchMetrics } from '@/services/analytics';
-import { Loader2, BarChart3, Users, Wand2, Calendar, AlertCircle, Globe, Sliders, Zap } from 'lucide-react';
+import { Loader2, BarChart3, Users, Wand2, Calendar, AlertCircle, Globe, Sliders, Zap, ChevronDown } from 'lucide-react';
 
 
 interface FeatureAdoption {
@@ -37,32 +37,114 @@ const DAY_OPTIONS = [
 ];
 
 const EVENT_LABELS: Record<string, string> = {
+  page_viewed: 'Page Views',
   commander_searched: 'Commander Searches',
   commander_selected: 'Commander Selections',
   deck_generated: 'Decks Generated',
+  deck_exported: 'Deck Exports',
   deck_generation_failed: 'Generation Failures',
   theme_toggled: 'Theme Toggles',
-  collection_imported: 'Collection Imports',
   combos_viewed: 'Combos Viewed',
-  page_viewed: 'Page Views',
+  collection_imported: 'Collection Imports',
 };
+
+const REGION_FLAGS: Record<string, string> = {
+  Americas: '🌎',
+  Europe: '🌍',
+  Asia: '🌏',
+  Oceania: '🌏',
+  Africa: '🌍',
+  Other: '🌐',
+};
+
+const SETTING_LOGICAL_ORDER: Record<string, string[]> = {
+  bracketLevel: ['all', '1', '2', '3', '4', '5'],
+  comboPreference: ['None', 'A Few', 'Many'],
+  maxRarity: ['common', 'uncommon', 'rare', 'none'],
+  deckFormat: ['Commander', 'Brawl', 'Custom'],
+  landCount: ['≤33 (Aggro)', '34-36', '37 (Standard)', '38-40', '41+ (Control)'],
+};
+
+const SETTINGS_PANELS = [
+  { key: 'deckFormat', label: 'Deck Format' },
+  { key: 'bracketLevel', label: 'Bracket Level' },
+  { key: 'comboPreference', label: 'Combo Preference' },
+  { key: 'gameChangerLimit', label: 'Game Changers' },
+  { key: 'budgetOption', label: 'EDHREC Card Pool' },
+  { key: 'deckBudget', label: 'Deck Budget' },
+  { key: 'maxCardPrice', label: 'Max Card Price' },
+  { key: 'maxRarity', label: 'Max Rarity' },
+  { key: 'landCount', label: 'Land Count' },
+];
+
+function parseDollarValue(s: string): number {
+  if (s === 'None') return -1;
+  const m = s.match(/^\$(\d+(?:\.\d+)?)$/);
+  return m ? parseFloat(m[1]) : Infinity;
+}
+
+function sortSettingEntries(key: string, entries: [string, number][]): [string, number][] {
+  const order = SETTING_LOGICAL_ORDER[key];
+  if (order) {
+    return [...entries].sort(([a], [b]) => {
+      const ai = order.indexOf(a);
+      const bi = order.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return 0;
+    });
+  }
+  if (key === 'deckBudget' || key === 'maxCardPrice') {
+    return [...entries].sort(([a], [b]) => parseDollarValue(a) - parseDollarValue(b));
+  }
+  if (key === 'gameChangerLimit') {
+    const numerics = entries
+      .filter(([k]) => k !== 'none' && k !== 'unlimited' && !isNaN(Number(k)))
+      .map(([k]) => k)
+      .sort((a, b) => Number(a) - Number(b));
+    const fullOrder = ['none', ...numerics, 'unlimited'];
+    return [...entries].sort(([a], [b]) => {
+      const ai = fullOrder.indexOf(a);
+      const bi = fullOrder.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      return 0;
+    });
+  }
+  return [...entries].sort(([, a], [, b]) => b - a);
+}
 
 function pct(n: number, total: number) {
   if (!total) return '0%';
   return `${Math.round((n / total) * 100)}%`;
 }
 
-function BarRow({ label, count, max }: { label: string; count: number; max: number }) {
+function BarRow({
+  label,
+  count,
+  max,
+  total,
+}: {
+  label: string;
+  count: number;
+  max: number;
+  total?: number;
+}) {
   return (
     <div>
       <div className="flex items-center justify-between text-sm mb-1">
-        <span className="capitalize">{label}</span>
-        <span className="text-muted-foreground tabular-nums">{count}</span>
+        <span className="leading-tight">{label}</span>
+        <span className="tabular-nums shrink-0 ml-3">
+          {count.toLocaleString()}
+          {total !== undefined && total > 0 && (
+            <span className="text-xs text-muted-foreground ml-1">({pct(count, total)})</span>
+          )}
+        </span>
       </div>
-      <div className="h-2 bg-muted rounded-full overflow-hidden">
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
         <div
-          className="h-full bg-primary rounded-full transition-all"
-          style={{ width: `${(count / max) * 100}%` }}
+          className="h-full bg-primary rounded-full transition-all duration-300"
+          style={{ width: max > 0 ? `${(count / max) * 100}%` : '0%' }}
         />
       </div>
     </div>
@@ -77,6 +159,7 @@ export function MetricsPage() {
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
   const [dailyMetric, setDailyMetric] = useState<string>('total');
+  const [showAllThemes, setShowAllThemes] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,12 +190,13 @@ export function MetricsPage() {
     : [];
 
   const sortedCommanders = data
-    ? Object.entries(data.commanderCounts).sort(([, a], [, b]) => b - a).slice(0, 20)
+    ? Object.entries(data.commanderCounts).sort(([, a], [, b]) => b - a).slice(0, 50)
     : [];
 
   const sortedThemes = data
     ? Object.entries(data.themeCounts ?? {}).sort(([, a], [, b]) => b - a)
     : [];
+  const visibleThemes = showAllThemes ? sortedThemes : sortedThemes.slice(0, 15);
   const maxThemeCount = sortedThemes.length > 0 ? sortedThemes[0][1] : 1;
 
   const DAILY_METRICS = [
@@ -141,18 +225,19 @@ export function MetricsPage() {
   const fa = data?.featureAdoption;
   const featureRows = fa && fa.deckCount > 0 ? [
     { label: 'Collection Mode', count: fa.collectionMode },
-    { label: 'Hyper Focus', count: fa.hyperFocus },
     { label: 'Per-Card Price Cap', count: fa.hasPriceLimit },
     { label: 'Total Budget Limit', count: fa.hasBudgetLimit },
     { label: 'Must-Include Cards', count: fa.hasMusts },
     { label: 'Banned Cards', count: fa.hasBans },
+    { label: 'Hyper Focus', count: fa.hyperFocus },
     { label: 'Tiny Leaders', count: fa.tinyLeaders },
-  ] : [];
+  ].sort((a, b) => b.count - a.count) : [];
 
   const sc = data?.settingsCounts;
 
   return (
     <main className="flex-1 container mx-auto px-4 py-8">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <BarChart3 className="w-6 h-6 text-primary" />
@@ -197,6 +282,7 @@ export function MetricsPage() {
 
       {data && !loading && (
         <div className="space-y-6">
+
           {/* Summary Cards */}
           <div className="grid grid-cols-4 gap-4">
             <Card className="bg-card/80 backdrop-blur-sm">
@@ -256,8 +342,8 @@ export function MetricsPage() {
             </Card>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Event Counts */}
+          {/* Row: Event Breakdown + Most Built Commanders */}
+          <div className="grid md:grid-cols-2 gap-6 items-start">
             <Card className="bg-card/80 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Event Breakdown</CardTitle>
@@ -279,18 +365,17 @@ export function MetricsPage() {
               </CardContent>
             </Card>
 
-            {/* Popular Commanders */}
             <Card className="bg-card/80 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
-                  Popular Commanders
+                  Most Built Commanders
                   <span className="ml-2 text-xs font-normal text-muted-foreground">
                     {uniqueCommanders} unique
                   </span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                   {sortedCommanders.map(([name, count], i) => (
                     <div key={name} className="flex items-center gap-2 text-sm">
                       <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
@@ -304,8 +389,10 @@ export function MetricsPage() {
                 </div>
               </CardContent>
             </Card>
+          </div>
 
-            {/* Regions */}
+          {/* Row: Regions + Feature Adoption */}
+          <div className="grid md:grid-cols-2 gap-6">
             <Card className="bg-card/80 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -314,9 +401,14 @@ export function MetricsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {sortedRegions.map(([region, count]) => (
-                    <BarRow key={region} label={region} count={count} max={maxRegionCount} />
+                    <BarRow
+                      key={region}
+                      label={`${REGION_FLAGS[region] ?? '🌐'} ${region}`}
+                      count={count}
+                      max={maxRegionCount}
+                    />
                   ))}
                   {sortedRegions.length === 0 && (
                     <p className="text-sm text-muted-foreground">No region data yet</p>
@@ -325,7 +417,6 @@ export function MetricsPage() {
               </CardContent>
             </Card>
 
-            {/* Feature Adoption */}
             <Card className="bg-card/80 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -333,20 +424,21 @@ export function MetricsPage() {
                   Feature Adoption
                   {fa && fa.deckCount > 0 && (
                     <span className="text-xs font-normal text-muted-foreground ml-1">
-                      of {fa.deckCount} decks
+                      of {fa.deckCount.toLocaleString()} decks
                     </span>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {featureRows.map(({ label, count }) => (
-                    <div key={label} className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className="font-medium tabular-nums">
-                        {count} <span className="text-muted-foreground text-xs">({pct(count, fa!.deckCount)})</span>
-                      </span>
-                    </div>
+                    <BarRow
+                      key={label}
+                      label={label}
+                      count={count}
+                      max={fa!.deckCount}
+                      total={fa!.deckCount}
+                    />
                   ))}
                   {featureRows.length === 0 && (
                     <p className="text-sm text-muted-foreground">No deck data yet</p>
@@ -354,100 +446,96 @@ export function MetricsPage() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Archetype Distribution */}
-            <Card className="bg-card/80 backdrop-blur-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Theme Distribution</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {sortedThemes.map(([theme, count]) => (
-                    <BarRow key={theme} label={theme} count={count} max={maxThemeCount} />
-                  ))}
-                  {sortedThemes.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No theme data yet</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Daily Activity */}
-            <Card className="bg-card/80 backdrop-blur-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Daily Activity</CardTitle>
-                  <div className="flex gap-1 bg-accent/50 rounded-md p-0.5">
-                    {DAILY_METRICS.map(m => (
-                      <button
-                        key={m.key}
-                        onClick={() => setDailyMetric(m.key)}
-                        className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-                          dailyMetric === m.key
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {sortedDays.length > 0 && sortedDays.some(([, v]) => v > 0) ? (
-                  <div className="flex items-end gap-[2px] h-32">
-                    {sortedDays.map(([day, count]) => (
-                      <div
-                        key={day}
-                        className="flex-1 bg-primary/80 rounded-t-sm hover:bg-primary transition-colors group relative"
-                        style={{ height: `${(count / maxDailyCount) * 100}%`, minHeight: count > 0 ? 2 : 0 }}
-                        title={`${day}: ${count}`}
-                      >
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-muted-foreground opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">
-                          {count}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No data yet for this metric</p>
-                )}
-                {sortedDays.length > 0 && (
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    <span>{sortedDays[0][0]}</span>
-                    <span>{sortedDays[sortedDays.length - 1][0]}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </div>
 
-          {/* Settings Distribution */}
+          {/* Daily Activity — full width */}
+          <Card className="bg-card/80 backdrop-blur-sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Daily Activity</CardTitle>
+                <div className="flex gap-1 bg-accent/50 rounded-md p-0.5">
+                  {DAILY_METRICS.map(m => (
+                    <button
+                      key={m.key}
+                      onClick={() => setDailyMetric(m.key)}
+                      className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                        dailyMetric === m.key
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {sortedDays.length > 0 && sortedDays.some(([, v]) => v > 0) ? (
+                <div className="flex items-end gap-[2px] h-40">
+                  {sortedDays.map(([day, count]) => (
+                    <div
+                      key={day}
+                      className="flex-1 bg-primary/80 rounded-t-sm hover:bg-primary transition-colors group relative"
+                      style={{
+                        height: `${Math.max((count / maxDailyCount) * 100, count > 0 ? 0.5 : 0)}%`,
+                        minHeight: count > 0 ? 3 : 0,
+                      }}
+                      title={`${day}: ${count}`}
+                    >
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-popover border border-border text-[10px] px-1.5 py-0.5 rounded shadow-sm opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10">
+                        <span className="font-medium">{count}</span>
+                        <span className="text-muted-foreground ml-1">{day.slice(5)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-40 flex items-center justify-center">
+                  <p className="text-sm text-muted-foreground">No data yet for this metric</p>
+                </div>
+              )}
+              {sortedDays.length > 0 && (
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-2">
+                  <span>{sortedDays[0]?.[0]}</span>
+                  {sortedDays.length > 4 && (
+                    <span>{sortedDays[Math.floor(sortedDays.length / 2)]?.[0]}</span>
+                  )}
+                  <span>{sortedDays[sortedDays.length - 1]?.[0]}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Settings Distribution — full width */}
           {sc && (
             <Card className="bg-card/80 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Sliders className="w-4 h-4" />
                   Settings Distribution
+                  {fa && fa.deckCount > 0 && (
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      % of {fa.deckCount.toLocaleString()} decks
+                    </span>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  {[
-                    { key: 'budgetOption', label: 'Budget Option' },
-                    { key: 'bracketLevel', label: 'Bracket Level' },
-                    { key: 'maxRarity', label: 'Max Rarity' },
-                    { key: 'gameChangerLimit', label: 'Game Changer Limit' },
-                  ].map(({ key, label }) => {
-                    const entries = Object.entries(sc[key] ?? {}).sort(([, a], [, b]) => b - a);
-                    const maxVal = entries.length > 0 ? entries[0][1] : 1;
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {SETTINGS_PANELS.map(({ key, label }) => {
+                    const raw = Object.entries(sc[key] ?? {});
+                    const entries = sortSettingEntries(key, raw);
+                    const maxVal = entries.length > 0 ? Math.max(...entries.map(([, v]) => v)) : 1;
+                    const total = fa && fa.deckCount > 0 ? fa.deckCount : undefined;
                     return (
-                      <div key={key}>
-                        <p className="text-xs font-medium text-muted-foreground mb-2">{label}</p>
-                        <div className="space-y-1.5">
+                      <div key={key} className="bg-muted/30 rounded-lg p-3">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                          {label}
+                        </p>
+                        <div className="space-y-2">
                           {entries.map(([val, count]) => (
-                            <BarRow key={val} label={val} count={count} max={maxVal} />
+                            <BarRow key={val} label={val} count={count} max={maxVal} total={total} />
                           ))}
                           {entries.length === 0 && (
                             <p className="text-xs text-muted-foreground">No data yet</p>
@@ -460,6 +548,47 @@ export function MetricsPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Theme Distribution — full width, collapsible */}
+          <Card className="bg-card/80 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                Theme Distribution
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {sortedThemes.length} themes
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {sortedThemes.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {visibleThemes.map(([theme, count]) => (
+                      <div key={theme} className="bg-muted/30 rounded-lg px-3 py-2">
+                        <BarRow label={theme} count={count} max={maxThemeCount} />
+                      </div>
+                    ))}
+                  </div>
+                  {sortedThemes.length > 15 && (
+                    <button
+                      onClick={() => setShowAllThemes(v => !v)}
+                      className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${showAllThemes ? 'rotate-180' : ''}`}
+                      />
+                      {showAllThemes
+                        ? 'Show less'
+                        : `Show all ${sortedThemes.length} themes`}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No theme data yet</p>
+              )}
+            </CardContent>
+          </Card>
+
         </div>
       )}
     </main>

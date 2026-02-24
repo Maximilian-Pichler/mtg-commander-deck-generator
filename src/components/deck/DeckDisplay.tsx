@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CardTypeIcon, ManaCost } from '@/components/ui/mtg-icons';
 import { CardPreviewModal } from '@/components/ui/CardPreviewModal';
+import { trackEvent } from '@/services/analytics';
 
 // Stats filter for interactive highlighting
 type StatsFilter =
@@ -261,9 +262,10 @@ interface ExportModalProps {
   onClose: () => void;
   generateDeckList: (excludeMustIncludes: boolean) => string;
   hasMustIncludes: boolean;
+  onExport: (format: 'clipboard' | 'download') => void;
 }
 
-function ExportModal({ isOpen, onClose, generateDeckList, hasMustIncludes }: ExportModalProps) {
+function ExportModal({ isOpen, onClose, generateDeckList, hasMustIncludes, onExport }: ExportModalProps) {
   const [copied, setCopied] = useState(false);
   const [excludeMustIncludes, setExcludeMustIncludes] = useState(false);
 
@@ -273,7 +275,8 @@ function ExportModal({ isOpen, onClose, generateDeckList, hasMustIncludes }: Exp
     navigator.clipboard.writeText(deckList);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [deckList]);
+    onExport('clipboard');
+  }, [deckList, onExport]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([deckList], { type: 'text/plain' });
@@ -283,7 +286,8 @@ function ExportModal({ isOpen, onClose, generateDeckList, hasMustIncludes }: Exp
     a.download = 'deck.txt';
     a.click();
     URL.revokeObjectURL(url);
-  }, [deckList]);
+    onExport('download');
+  }, [deckList, onExport]);
 
   if (!isOpen) return null;
 
@@ -1064,7 +1068,15 @@ export function DeckDisplay() {
 
       {/* Modals */}
       <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
-      <ExportModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} generateDeckList={generateDeckList} hasMustIncludes={customization.mustIncludeCards.length > 0} />
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        generateDeckList={generateDeckList}
+        hasMustIncludes={customization.mustIncludeCards.length > 0}
+        onExport={(format) => {
+          if (commander) trackEvent('deck_exported', { commanderName: commander.name, format });
+        }}
+      />
     </>
   );
 }

@@ -163,7 +163,7 @@ export function ComboDisplay({ combos }: ComboDisplayProps) {
   };
 
   return (
-    <div className="mt-6 p-4 rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
+    <div className="mt-6 rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
       <button
         onClick={() => {
           const willExpand = !expanded;
@@ -176,7 +176,7 @@ export function ComboDisplay({ combos }: ComboDisplayProps) {
             });
           }
         }}
-        className="flex items-center gap-2 w-full text-left"
+        className="flex items-center gap-2 w-full text-left p-4"
       >
         <Sparkles className="w-4 h-4 text-primary" />
         <h3 className="text-sm font-semibold">Combos in Your Deck</h3>
@@ -186,7 +186,7 @@ export function ComboDisplay({ combos }: ComboDisplayProps) {
         <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
 
-      <div className={`overflow-hidden transition-all duration-300 ${expanded ? 'mt-4 max-h-[8000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className={`overflow-hidden transition-all duration-300 ${expanded ? 'px-4 pb-4 max-h-[8000px] opacity-100' : 'max-h-0 opacity-0'}`}>
         {/* Complete combos */}
         {completeCombos.length > 0 && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">

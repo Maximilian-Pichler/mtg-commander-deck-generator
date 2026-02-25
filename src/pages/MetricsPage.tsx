@@ -30,6 +30,7 @@ interface MetricsSummary {
   hourlyBreakdown: Record<string, Record<string, number>>;
   hourlyUniqueUsers: Record<string, number>;
   regionCounts: Record<string, number>;
+  deviceCounts: Record<string, number>;
   featureAdoption: FeatureAdoption;
   settingsCounts: Record<string, Record<string, number>>;
   dateRange: { from: string; to: string };
@@ -433,8 +434,8 @@ export function MetricsPage() {
             </Card>
           </div>
 
-          {/* Row: Regions + Feature Adoption */}
-          <div className="grid md:grid-cols-2 gap-6">
+          {/* Row: Regions + Devices + Feature Adoption */}
+          <div className="grid md:grid-cols-3 gap-6">
             <Card className="bg-card/80 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -456,6 +457,31 @@ export function MetricsPage() {
                     <p className="text-sm text-muted-foreground">No region data yet</p>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/80 backdrop-blur-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Devices
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const dc = data.deviceCounts ?? {};
+                  const total = Object.values(dc).reduce((a, b) => a + b, 0);
+                  const maxDev = total > 0 ? Math.max(...Object.values(dc)) : 1;
+                  return total > 0 ? (
+                    <div className="space-y-3">
+                      {[['mobile', '📱'], ['desktop', '🖥️']] .map(([key, icon]) => dc[key] !== undefined ? (
+                        <BarRow key={key} label={`${icon} ${key.charAt(0).toUpperCase() + key.slice(1)}`} count={dc[key]} max={maxDev} total={total} />
+                      ) : null)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No device data yet</p>
+                  );
+                })()}
               </CardContent>
             </Card>
 

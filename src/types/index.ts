@@ -335,6 +335,8 @@ export interface AppState {
 
   // EDHREC land suggestion (set when commander data is fetched)
   edhrecLandSuggestion: { landCount: number; nonBasicLandCount: number } | null;
+  // True when the user has manually adjusted land count (prevents EDHREC from overriding)
+  userEditedLands: boolean;
 
   // Customization
   customization: Customization;

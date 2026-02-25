@@ -117,14 +117,17 @@ export function BuilderPage() {
         const themes = data.themes;
 
         // Apply EDHREC land stats — more accurate than archetype-based estimates
+        // Only override if the user hasn't manually adjusted the land count
         const { landDistribution } = data.stats;
         const suggestedLands = Math.round(landDistribution.total);
         const suggestedNonBasic = Math.round(landDistribution.nonbasic);
         if (suggestedLands > 0) {
-          updateCustomization({
-            landCount: suggestedLands,
-            nonBasicLandCount: suggestedNonBasic,
-          });
+          if (!useStore.getState().userEditedLands) {
+            updateCustomization({
+              landCount: suggestedLands,
+              nonBasicLandCount: suggestedNonBasic,
+            });
+          }
           setEdhrecLandSuggestion({
             landCount: suggestedLands,
             nonBasicLandCount: suggestedNonBasic,
@@ -262,14 +265,17 @@ export function BuilderPage() {
         const themes = data.themes;
 
         // Apply EDHREC land stats for the updated commander pairing
+        // Only override if the user hasn't manually adjusted the land count
         const { landDistribution } = data.stats;
         const suggestedLands = Math.round(landDistribution.total);
         const suggestedNonBasic = Math.round(landDistribution.nonbasic);
         if (suggestedLands > 0) {
-          updateCustomization({
-            landCount: suggestedLands,
-            nonBasicLandCount: suggestedNonBasic,
-          });
+          if (!useStore.getState().userEditedLands) {
+            updateCustomization({
+              landCount: suggestedLands,
+              nonBasicLandCount: suggestedNonBasic,
+            });
+          }
           setEdhrecLandSuggestion({
             landCount: suggestedLands,
             nonBasicLandCount: suggestedNonBasic,

@@ -112,6 +112,7 @@ export const useStore = create<AppState>((set) => ({
   themesError: null,
   themeSource: 'local',
   edhrecLandSuggestion: null,
+  userEditedLands: false,
 
   // Customization
   customization: defaultCustomization,
@@ -141,6 +142,7 @@ export const useStore = create<AppState>((set) => ({
       themesError: null,
       themeSource: 'local',
       edhrecLandSuggestion: null,
+      userEditedLands: false,
     };
   }),
 
@@ -234,6 +236,7 @@ export const useStore = create<AppState>((set) => ({
     themesLoading: false,
     themesError: null,
     themeSource: 'local',
+    userEditedLands: false,
     // Preserve all customization settings when switching commanders
     customization: state.customization,
     generatedDeck: null,

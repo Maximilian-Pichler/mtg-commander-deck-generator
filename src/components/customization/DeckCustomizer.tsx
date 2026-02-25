@@ -85,6 +85,8 @@ export function DeckCustomizer() {
       landCount: newLandCount,
       nonBasicLandCount: newNonBasic,
     });
+    // Mark that the user manually adjusted lands so EDHREC doesn't override
+    useStore.setState({ userEditedLands: true });
   };
 
   // Focus inputs when entering edit mode

@@ -258,3 +258,26 @@
 .commander-gradient .glow {
   box-shadow: 0 0 20px color-mix(in srgb, var(--gradient-start) 20%, transparent);
 }
+
+/* Card preview: landscape mobile layout (side-by-side) */
+@media (orientation: landscape) and (max-height: 500px) {
+  .card-preview-content {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .card-preview-content .card-preview-image img {
+    max-height: 80vh;
+  }
+
+  .card-preview-content .card-preview-info {
+    text-align: left;
+    margin-top: 0;
+  }
+
+  .card-preview-content .card-preview-info > div {
+    justify-content: flex-start;
+  }
+}

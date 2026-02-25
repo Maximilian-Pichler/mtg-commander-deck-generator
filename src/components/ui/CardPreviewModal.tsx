@@ -41,14 +41,14 @@ export function CardPreviewModal({ card, onClose, onBuildDeck }: CardPreviewModa
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
-      <div className="relative animate-scale-in max-w-[90vw] sm:max-w-none" onClick={(e) => e.stopPropagation()}>
+      <div className="relative animate-scale-in max-w-[90vw] sm:max-w-none card-preview-content" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onClose}
-          className="absolute -top-10 right-0 text-white/70 hover:text-white transition-colors"
+          className="absolute -top-10 right-0 text-white/70 hover:text-white transition-colors z-10"
         >
           <X className="w-6 h-6" />
         </button>
-        <div className="relative">
+        <div className="relative card-preview-image shrink-0">
           <img
             src={imgUrl}
             alt={faceName}
@@ -68,7 +68,7 @@ export function CardPreviewModal({ card, onClose, onBuildDeck }: CardPreviewModa
             </button>
           )}
         </div>
-        <div className="mt-4 text-center">
+        <div className="mt-4 text-center card-preview-info">
           <h3 className="text-white font-bold text-lg">{faceName}</h3>
           <p className="text-white/70 text-sm">{faceType}</p>
           {getCardPrice(card, currency) && (

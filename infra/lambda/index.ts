@@ -116,6 +116,7 @@ async function handleGet(params: Record<string, string>) {
     const returningUsers = new Set<string>();
     const fromDay = from.slice(0, 10); // "YYYY-MM-DD" for firstSeen comparison
     const regionCounts: Record<string, number> = {};
+    const deviceCounts: Record<string, number> = {};
     const featureAdoption = {
       collectionMode: 0,
       hyperFocus: 0,
@@ -181,6 +182,10 @@ async function handleGet(params: Record<string, string>) {
       // Region
       if (meta?.region && typeof meta.region === 'string') {
         regionCounts[meta.region] = (regionCounts[meta.region] || 0) + 1;
+      }
+
+      if (meta?.deviceType && typeof meta.deviceType === 'string') {
+        deviceCounts[meta.deviceType] = (deviceCounts[meta.deviceType] || 0) + 1;
       }
 
       // Theme distribution and commander counts (deck_generated events only)
@@ -269,6 +274,7 @@ async function handleGet(params: Record<string, string>) {
         hourlyBreakdown,
         hourlyUniqueUsers,
         regionCounts,
+        deviceCounts,
         featureAdoption,
         settingsCounts,
         dateRange: { from, to },

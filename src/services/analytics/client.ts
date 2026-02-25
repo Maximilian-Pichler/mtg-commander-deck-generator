@@ -15,6 +15,16 @@ function getUserId(): string {
   }
 }
 
+function getDeviceType(): 'mobile' | 'desktop' {
+  try {
+    return /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      ? 'mobile'
+      : 'desktop';
+  } catch {
+    return 'desktop';
+  }
+}
+
 function getFirstSeen(): string {
   try {
     const KEY = 'mtg_first_seen';
@@ -62,6 +72,7 @@ export function trackEvent<T extends AnalyticsEventType>(
         ...(metadata as Record<string, unknown>),
         userId: getUserId(),
         firstSeen: getFirstSeen(),
+        deviceType: getDeviceType(),
         region: getRegion(),
       },
     });

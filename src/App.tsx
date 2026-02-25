@@ -203,6 +203,16 @@ function Layout({ children }: { children: React.ReactNode }) {
               >
                 Patreon
               </a>
+              {' · '}
+              Send{' '}
+              <a
+                href="https://forms.gle/H3eKtDh52muFm7d56"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                feedback
+              </a>
             </p>
           </div>
         </footer>

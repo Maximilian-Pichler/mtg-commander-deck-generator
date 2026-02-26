@@ -789,7 +789,7 @@ export function DeckDisplay() {
       // Sort
       cards.sort((a, b) => {
         if (sortBy === 'name') return a.card.name.localeCompare(b.card.name);
-        if (sortBy === 'cmc') return a.card.cmc - b.card.cmc;
+        if (sortBy === 'cmc') return (a.card.cmc - b.card.cmc) || a.card.name.localeCompare(b.card.name);
         if (sortBy === 'price') {
           const priceA = parseFloat(getCardPrice(a.card, customization.currency) || '0');
           const priceB = parseFloat(getCardPrice(b.card, customization.currency) || '0');
@@ -1021,41 +1021,64 @@ export function DeckDisplay() {
                 ))}
               </div>
             ) : (
-              <div ref={gridAnimateRef} className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                {TYPE_ORDER.flatMap((type) =>
-                  (groupedCards[type] || []).map(({ card, quantity }) => {
-                    const dimmed = combinedMatchingIds !== null && !combinedMatchingIds.has(card.id);
-                    return (
-                      <button
-                        key={card.id}
-                        onClick={() => setPreviewCard(card)}
-                        className={`relative group transition-opacity duration-200 ${
-                          dimmed ? 'opacity-30' : ''
-                        }`}
-                      >
-                        <img
-                          src={getCardImageUrl(card, 'small')}
-                          alt={card.name}
-                          className={`w-full rounded transition-transform ${dimmed ? '' : 'group-hover:scale-105'}`}
-                          loading="lazy"
-                        />
-                        {quantity > 1 && (
-                          <span className="absolute top-1 right-1 bg-black/80 text-white text-xs px-1.5 rounded">
-                            {quantity}x
-                          </span>
-                        )}
-                        {isDoubleFacedCard(card) && (
-                          <span className="absolute bottom-1 right-1 bg-black/70 text-white rounded-full w-5 h-5 flex items-center justify-center" title="Double-faced card">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
-                              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                              <path d="M3 3v5h5" />
-                            </svg>
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })
-                )}
+              <div className="p-4 space-y-1">
+                {TYPE_ORDER.map((type) => {
+                  const cards = groupedCards[type] || [];
+                  if (cards.length === 0) return null;
+                  return (
+                    <div key={type}>
+                      <div className="flex items-center gap-1.5 pt-2 pb-1">
+                        <CardTypeIcon type={type} size="sm" className="opacity-60" />
+                        <span className="text-xs font-medium text-muted-foreground">{type}</span>
+                        <span className="text-[10px] text-muted-foreground/60">{cards.length}</span>
+                      </div>
+                      <div ref={gridAnimateRef} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                        {cards.map(({ card, quantity }) => {
+                          const dimmed = combinedMatchingIds !== null && !combinedMatchingIds.has(card.id);
+                          return (
+                            <button
+                              key={card.id}
+                              onClick={() => setPreviewCard(card)}
+                              className={`relative group transition-opacity duration-200 ${
+                                dimmed ? 'opacity-30' : ''
+                              }`}
+                            >
+                              <img
+                                src={getCardImageUrl(card, 'small')}
+                                alt={card.name}
+                                className={`w-full rounded transition-transform ${dimmed ? '' : 'group-hover:scale-105'}`}
+                                loading="lazy"
+                              />
+                              {quantity > 1 && (
+                                <span className="absolute top-1 right-1 bg-black/80 text-white text-xs px-1.5 rounded">
+                                  {quantity}x
+                                </span>
+                              )}
+                              {sortBy === 'cmc' && (
+                                <span className="absolute top-1 left-1 bg-black/80 text-white text-[10px] px-1 rounded">
+                                  {card.cmc}
+                                </span>
+                              )}
+                              {sortBy === 'price' && (
+                                <span className="absolute top-1 left-1 bg-black/80 text-white text-[10px] px-1 rounded">
+                                  {formatPrice(getCardPrice(card, customization.currency), sym)}
+                                </span>
+                              )}
+                              {isDoubleFacedCard(card) && (
+                                <span className="absolute bottom-1 right-1 bg-black/70 text-white rounded-full w-5 h-5 flex items-center justify-center" title="Double-faced card">
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
+                                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                    <path d="M3 3v5h5" />
+                                  </svg>
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

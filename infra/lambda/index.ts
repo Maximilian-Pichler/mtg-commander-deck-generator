@@ -17,23 +17,29 @@ export async function handler(event: {
   headers?: Record<string, string>;
   body?: string;
 }) {
-  const method = event.requestContext.http.method;
+  try {
+    const method = event.requestContext.http.method;
 
-  if (method === 'POST') {
-    return handlePost(event.body);
-  }
-  if (method === 'GET') {
-    const secret = process.env.METRICS_SECRET;
-    if (secret) {
-      const auth = event.headers?.authorization || event.headers?.Authorization || '';
-      if (auth !== `Bearer ${secret}`) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
-      }
+    if (method === 'POST') {
+      return handlePost(event.body);
     }
-    return handleGet(event.queryStringParameters || {});
-  }
+    if (method === 'GET') {
+      const secret = process.env.METRICS_SECRET;
+      if (secret) {
+        const auth = event.headers?.authorization || event.headers?.Authorization || '';
+        if (auth !== `Bearer ${secret}`) {
+          return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+        }
+      }
+      return handleGet(event.queryStringParameters || {});
+    }
 
-  return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('Lambda handler error:', message, err);
+    return { statusCode: 500, body: JSON.stringify({ error: message }) };
+  }
 }
 
 async function handlePost(body?: string) {

@@ -105,7 +105,7 @@ function calculateTargetCounts(
       utility: 3,
     },
     60: {
-      lands: 23,
+      lands: landCount,
       ramp: 4,
       cardDraw: 4,
       singleRemoval: 5,
@@ -115,7 +115,7 @@ function calculateTargetCounts(
       utility: 0,
     },
     40: {
-      lands: 16,
+      lands: landCount,
       ramp: 2,
       cardDraw: 2,
       singleRemoval: 3,

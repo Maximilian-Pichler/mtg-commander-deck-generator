@@ -31,7 +31,16 @@
       "Bash(node ./node_modules/.bin/vite build:*)",
       "Bash(node:*)",
       "WebFetch(domain:edhrec.com)",
-      "WebFetch(domain:scryfall.com)"
+      "WebFetch(domain:scryfall.com)",
+      "Bash(GIT_EXEC_PATH=\"\" /usr/bin/git -C /a/Coding/MtgMakeDeckForMe diff infra/lambda/index.ts)",
+      "Bash(git --no-optional-locks diff infra/lambda/index.ts)",
+      "Bash(GIT_EXEC_PATH=\"\" /usr/bin/git -C /a/Coding/MtgMakeDeckForMe diff --staged infra/lambda/index.ts)",
+      "Bash(git --no-optional-locks diff --staged infra/lambda/index.ts)",
+      "Bash(\"F:/Program Files/Git/cmd/git.exe\" -C \"A:/Coding/MtgMakeDeckForMe\" diff infra/lambda/index.ts)",
+      "Bash(\"F:/Program Files/Git/cmd/git.exe\" -C \"A:/Coding/MtgMakeDeckForMe\" diff --staged infra/lambda/index.ts)",
+      "Bash(NODE_PATH=\"\" NODE_OPTIONS=\"\" \"F:/Program Files/Git/cmd/git.exe\" -C \"A:/Coding/MtgMakeDeckForMe\" status --porcelain)",
+      "Bash(NODE_PATH=\"\" NODE_OPTIONS=\"\" \"F:/Program Files/Git/cmd/git.exe\" -C \"A:/Coding/MtgMakeDeckForMe\" status)",
+      "Bash(NODE_PATH=\"\" \"F:/Program Files/Git/cmd/git.exe\" -C \"A:/Coding/MtgMakeDeckForMe\" log --oneline -10)"
     ]
   }
 }

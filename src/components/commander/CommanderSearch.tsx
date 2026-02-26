@@ -418,12 +418,14 @@ export function CommanderSearch() {
                     </p>
                   )}
 
+                  {/* TODO: re-enable when popular data is more robust
                   <button
                     onClick={() => setSuggestionTab('popular')}
                     className="mt-4 text-xs text-muted-foreground/60 hover:text-primary transition-colors"
                   >
                     or see popular on this site &rarr;
                   </button>
+                  */}
                 </>
               ) : (
                 <>

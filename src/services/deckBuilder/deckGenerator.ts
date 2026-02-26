@@ -23,7 +23,6 @@ import {
   calculateCurveTargets,
   hasCurveRoom,
 } from './curveUtils';
-import { getDeckFormatConfig } from '@/lib/constants/archetypes';
 import { loadTaggerData, hasTaggerData, getTaggerRole } from '@/services/tagger/client';
 
 interface GenerationContext {
@@ -61,15 +60,8 @@ function calculateTargetCounts(
   // Calculate total deck cards (commander is separate for 99, included for 40/60)
   const deckCards = format === 99 ? 99 : format - 1;
 
-  // Clamp land count to valid range for the format (safety net in case UI state is stale)
-  const formatConfig = getDeckFormatConfig(format);
-  const landCount = Math.min(
-    Math.max(formatConfig.landRange[0], customization.landCount),
-    formatConfig.landRange[1]
-  );
-  if (landCount !== customization.landCount) {
-    console.warn(`[DeckGen] Clamped landCount from ${customization.landCount} to ${landCount} for ${format}-card format (range: ${formatConfig.landRange[0]}-${formatConfig.landRange[1]})`);
-  }
+  // Respect the user's land count — clamp only to sane absolute bounds
+  const landCount = Math.min(Math.max(1, customization.landCount), deckCards - 1);
   const nonLandCards = deckCards - landCount;
 
   // If we have EDHREC stats, use percentage-based targets

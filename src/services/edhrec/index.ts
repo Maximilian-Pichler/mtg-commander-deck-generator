@@ -13,7 +13,6 @@ export {
 export {
   getQueryForTheme,
   getKeywordsForTheme,
-  getSuggestedArchetype,
   buildQueriesFromThemes,
   getAllThemeNames,
   type ThemeQuery,

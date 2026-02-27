@@ -19,7 +19,6 @@ export interface AnalyticsEventMetadata {
   deck_generated: {
     commanderName: string;
     partnerName?: string;
-    archetype: string;
     deckFormat: number;
     themes: string[];
     collectionMode: boolean;

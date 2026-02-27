@@ -1,23 +1,10 @@
 import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Select } from '@/components/ui/select';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { useStore } from '@/store';
-import { ARCHETYPE_LABELS } from '@/lib/constants/archetypes';
-import { Archetype } from '@/types';
-import { ChevronDown, Crosshair, X } from 'lucide-react';
+import { ChevronDown, Crosshair } from 'lucide-react';
 import { trackEvent } from '@/services/analytics';
 
-interface ArchetypeDisplayProps {
-  deselectedThemes?: string[];
-  onDismissDeselected?: () => void;
-}
-
-const confidenceColors = {
-  high: 'bg-green-100 text-green-800 border-green-300',
-  medium: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  low: 'bg-gray-100 text-gray-800 border-gray-300',
-};
+interface ArchetypeDisplayProps {}
 
 function ThemeLoadingSkeleton() {
   return (
@@ -79,11 +66,8 @@ function ThemeChip({
   );
 }
 
-export function ArchetypeDisplay({ deselectedThemes, onDismissDeselected }: ArchetypeDisplayProps) {
+export function ArchetypeDisplay({}: ArchetypeDisplayProps) {
   const {
-    detectedArchetypes,
-    selectedArchetype,
-    setSelectedArchetype,
     commander,
     edhrecThemes,
     selectedThemes,
@@ -103,13 +87,6 @@ export function ArchetypeDisplay({ deselectedThemes, onDismissDeselected }: Arch
   });
 
   if (!commander) return null;
-
-  const primaryArchetype = detectedArchetypes[0];
-  const secondaryArchetypes = detectedArchetypes.slice(1, 4);
-
-  const archetypeOptions = Object.entries(ARCHETYPE_LABELS).map(
-    ([value, label]) => ({ value, label })
-  );
 
   const hasEdhrecThemes = themeSource === 'edhrec' && edhrecThemes.length > 0;
 
@@ -225,86 +202,26 @@ export function ArchetypeDisplay({ deselectedThemes, onDismissDeselected }: Arch
             </p>
           )}
 
-          {/* Deselected themes notice (when bracket change removed selected themes) */}
-          {deselectedThemes && deselectedThemes.length > 0 && (
-            <div className="mt-2 flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded-md">
-              <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-              </svg>
-              <span className="flex-1">
-                <strong>{deselectedThemes.join(', ')}</strong>
-                {deselectedThemes.length === 1 ? ' is' : ' are'} not available with the current settings and {deselectedThemes.length === 1 ? 'was' : 'were'} deselected.
-              </span>
-              {onDismissDeselected && (
-                <button onClick={onDismissDeselected} className="shrink-0 p-0.5 hover:bg-amber-500/20 rounded transition-colors">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          )}
         </div>
       )}
 
-      {/* Fallback Notice */}
+      {/* Fallback Notice — shown when EDHREC data is unavailable */}
       {!themesLoading && themesError && (
         <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded-md">
-          No EDHREC data available for this commander. This usually means the commander is banned or too new, or there may be a connection issue with EDHREC. Using local archetype detection as a fallback — deck quality will be significantly impacted without EDHREC data.
-        </div>
-      )}
-
-      {/* Local Archetype Detection (shown when EDHREC unavailable or as fallback) */}
-      {(!hasEdhrecThemes || themesError) && !themesLoading && (
-        <div>
-          <label className="text-sm font-medium text-muted-foreground mb-2 block">
-            Detected Archetype
-          </label>
-
-          {primaryArchetype && (
-            <div className="flex items-center gap-2 mb-2">
-              <Badge
-                variant="default"
-                className={`text-base px-3 py-1 ${confidenceColors[primaryArchetype.confidence]}`}
+          {customization.bracketLevel !== 'all' || customization.budgetOption !== 'any' ? (
+            <>
+              No EDHREC data for the current bracket/budget combination. Try resetting your{' '}
+              <button
+                onClick={() => updateCustomization({ bracketLevel: 'all', budgetOption: 'any' })}
+                className="underline font-semibold hover:text-amber-500 dark:hover:text-amber-300 transition-colors"
               >
-                {ARCHETYPE_LABELS[primaryArchetype.archetype]}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                ({primaryArchetype.confidence} confidence)
-              </span>
-            </div>
+                customization settings
+              </button>
+              {' '}to defaults.
+            </>
+          ) : (
+            <>No EDHREC data available for this commander. This usually means the commander is banned or too new, or there may be a connection issue with EDHREC. Deck quality will be significantly impacted without EDHREC data.</>
           )}
-
-          {secondaryArchetypes.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              <span className="text-xs text-muted-foreground mr-1">Also:</span>
-              {secondaryArchetypes.map((arch) => (
-                <Badge
-                  key={arch.archetype}
-                  variant="outline"
-                  className="text-xs"
-                >
-                  {ARCHETYPE_LABELS[arch.archetype]}
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {/* Always show dropdown when no EDHREC themes */}
-          <div className="mt-3">
-            <label className="text-sm font-medium text-muted-foreground mb-2 block">
-              Override Archetype
-            </label>
-            <Select
-              value={selectedArchetype}
-              onChange={(e) => setSelectedArchetype(e.target.value as Archetype)}
-              options={archetypeOptions}
-              className="w-full"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Change this to adjust how the deck is built
-            </p>
-          </div>
         </div>
       )}
 
@@ -360,7 +277,7 @@ export function ArchetypeDisplay({ deselectedThemes, onDismissDeselected }: Arch
                       <span className={`text-sm font-medium ${customization.hyperFocus ? 'text-primary' : ''}`}>
                         Hyper Focus
                       </span>
-                      <InfoTooltip text="Experimental: Prioritizes cards unique to your selected themes and deprioritizes generic staples that appear across many archetypes. Great for discovering hidden gems specific to your strategy." />                      
+                      <InfoTooltip text="Experimental: Prioritizes cards unique to your selected themes and deprioritizes generic staples that appear across many archetypes. Great for discovering hidden gems specific to your strategy." />
                     </div>
                     <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
                       Discover unique cards, avoid generic staples

@@ -7,7 +7,6 @@ import type {
   DeckCategory,
   DeckComposition,
   Customization,
-  Archetype,
   DeckFormat,
   DeckDataSource,
   ThemeResult,
@@ -31,7 +30,6 @@ interface GenerationContext {
   commander: ScryfallCard;
   partnerCommander: ScryfallCard | null;
   colorIdentity: string[];
-  archetype: Archetype;
   customization: Customization;
   selectedThemes?: ThemeResult[];
   collectionNames?: Set<string>;

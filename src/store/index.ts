@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AppState, Customization, BanList, AppliedList, ArchetypeResult, Archetype, ScryfallCard, GeneratedDeck, EDHRECTheme, ThemeResult } from '@/types';
+import type { AppState, Customization, BanList, AppliedList, ScryfallCard, GeneratedDeck, EDHRECTheme, ThemeResult } from '@/types';
 import { isEuropean } from '@/lib/region';
 
 const BANNED_CARDS_KEY = 'mtg-deck-builder-banned-cards';
@@ -179,10 +179,6 @@ export const useStore = create<AppState>((set) => ({
   partnerCommander: null,
   colorIdentity: [],
 
-  // Archetype
-  detectedArchetypes: [],
-  selectedArchetype: 'midrange' as Archetype,
-
   // EDHREC Themes
   edhrecThemes: [],
   selectedThemes: [],
@@ -244,13 +240,6 @@ export const useStore = create<AppState>((set) => ({
       edhrecNumDecks: null,
     };
   }),
-
-  setDetectedArchetypes: (archetypes: ArchetypeResult[]) => set({
-    detectedArchetypes: archetypes,
-    selectedArchetype: archetypes[0]?.archetype || ('midrange' as Archetype),
-  }),
-
-  setSelectedArchetype: (archetype: Archetype) => set({ selectedArchetype: archetype }),
 
   setEdhrecThemes: (themes: EDHRECTheme[]) => set({
     edhrecThemes: themes,
@@ -327,8 +316,6 @@ export const useStore = create<AppState>((set) => ({
     commander: null,
     partnerCommander: null,
     colorIdentity: [],
-    detectedArchetypes: [],
-    selectedArchetype: 'midrange' as Archetype,
     edhrecThemes: [],
     selectedThemes: [],
     themesLoading: false,

@@ -86,13 +86,6 @@ export enum Archetype {
   GOODSTUFF = 'goodstuff',
 }
 
-export interface ArchetypeResult {
-  archetype: Archetype;
-  score: number;
-  matchedKeywords: string[];
-  confidence: 'high' | 'medium' | 'low';
-}
-
 // EDHREC Theme types
 export interface EDHRECTheme {
   name: string;
@@ -363,10 +356,6 @@ export interface AppState {
   partnerCommander: ScryfallCard | null;
   colorIdentity: string[];
 
-  // Archetype
-  detectedArchetypes: ArchetypeResult[];
-  selectedArchetype: Archetype;
-
   // EDHREC Themes
   edhrecThemes: EDHRECTheme[];
   selectedThemes: ThemeResult[];
@@ -394,8 +383,6 @@ export interface AppState {
   // Actions
   setCommander: (card: ScryfallCard | null) => void;
   setPartnerCommander: (card: ScryfallCard | null) => void;
-  setDetectedArchetypes: (archetypes: ArchetypeResult[]) => void;
-  setSelectedArchetype: (archetype: Archetype) => void;
   setEdhrecThemes: (themes: EDHRECTheme[]) => void;
   setEdhrecNumDecks: (count: number | null) => void;
   setSelectedThemes: (themes: ThemeResult[]) => void;

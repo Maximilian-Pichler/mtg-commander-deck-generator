@@ -12,12 +12,7 @@ import { ManaCost, ColorIdentity } from '@/components/ui/mtg-icons';
 import { useStore } from '@/store';
 import { generateDeck } from '@/services/deckBuilder/deckGenerator';
 import { getCardByName, getCardImageUrl } from '@/services/scryfall/client';
-import {
-  detectArchetypes,
-  getArchetypeDefaultCustomization,
-} from '@/services/deckBuilder/archetypeDetector';
 import { fetchCommanderData, fetchPartnerCommanderData, formatCommanderNameForUrl } from '@/services/edhrec';
-import { ARCHETYPE_LABELS } from '@/lib/constants/archetypes';
 import { applyCommanderTheme, resetTheme } from '@/lib/commanderTheme';
 import type { BracketLevel, BudgetOption, ThemeResult } from '@/types';
 import { Loader2, Wand2, ArrowLeft, ExternalLink } from 'lucide-react';
@@ -31,22 +26,21 @@ export function BuilderPage() {
   const [isLoadingCommander, setIsLoadingCommander] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [partnerImageLoaded, setPartnerImageLoaded] = useState(false);
-  const [deselectedThemes, setDeselectedThemes] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [noDataForSettings, setNoDataForSettings] = useState(false);
 
   const {
     commander,
     partnerCommander,
     colorIdentity,
-    selectedArchetype,
     selectedThemes,
     customization,
     generatedDeck,
     isLoading,
     loadingMessage,
+    themesLoading,
     setCommander,
     setPartnerCommander,
-    setDetectedArchetypes,
     updateCustomization,
     setEdhrecThemes,
     setEdhrecNumDecks,
@@ -100,28 +94,16 @@ export function BuilderPage() {
         return;
       }
 
-      // Detect archetypes
-      const archetypes = detectArchetypes(card);
-      setDetectedArchetypes(archetypes);
-
-      // Only apply archetype land-count defaults on first commander of the session
-      // (when landCount is still the store default). Preserve user's choice when switching.
-      if (archetypes.length > 0 && customization.landCount === 37) {
-        const defaults = getArchetypeDefaultCustomization(archetypes[0].archetype);
-        updateCustomization(defaults);
-      }
-
       // Fetch EDHREC themes
       setThemesLoading(true);
       setThemesError(null);
 
       try {
         const bracketLevel = customization.bracketLevel !== 'all' ? customization.bracketLevel : undefined;
-        // Budget option doesn't affect EDHREC theme availability — only card recommendations during generation
         const data = await fetchCommanderData(card.name, undefined, bracketLevel);
         const themes = data.themes;
 
-        // Apply EDHREC land stats — more accurate than archetype-based estimates
+        // Apply EDHREC land stats — more accurate than hardcoded defaults
         // Only override if the user hasn't manually adjusted the land count
         const { landDistribution } = data.stats;
         const suggestedLands = Math.round(landDistribution.total);
@@ -156,27 +138,11 @@ export function BuilderPage() {
           setSelectedThemes(themeResults);
         } else {
           setThemesError('No themes found on EDHREC');
-          fallbackToLocalArchetypes(archetypes);
         }
       } catch {
         setThemesError('Could not fetch EDHREC themes');
-        fallbackToLocalArchetypes(archetypes);
       } finally {
         setThemesLoading(false);
-      }
-
-      function fallbackToLocalArchetypes(archetypes: ReturnType<typeof detectArchetypes>) {
-        if (archetypes.length > 0) {
-          const localThemes: ThemeResult[] = archetypes.slice(0, 3).map((a, index) => ({
-            name: ARCHETYPE_LABELS[a.archetype],
-            source: 'local' as const,
-            archetype: a.archetype,
-            score: a.score,
-            confidence: a.confidence,
-            isSelected: index === 0,
-          }));
-          setSelectedThemes(localThemes);
-        }
       }
     }
 
@@ -310,19 +276,6 @@ export function BuilderPage() {
           setSelectedThemes(themeResults);
         } else {
           setThemesError('No themes found on EDHREC');
-          // Fall back to local archetypes
-          const archetypes = detectArchetypes(commander!, partnerCommander ?? undefined);
-          if (archetypes.length > 0) {
-            const localThemes: ThemeResult[] = archetypes.slice(0, 3).map((a, index) => ({
-              name: ARCHETYPE_LABELS[a.archetype],
-              source: 'local' as const,
-              archetype: a.archetype,
-              score: a.score,
-              confidence: a.confidence,
-              isSelected: index === 0,
-            }));
-            setSelectedThemes(localThemes);
-          }
         }
       } catch {
         setThemesError('Could not fetch EDHREC themes');
@@ -349,11 +302,14 @@ export function BuilderPage() {
     // Skip if commander not loaded yet, or if neither setting actually changed
     if (!commander || (currentBracket === prevBracket && currentBudget === prevBudget)) return;
 
-    // Only re-fetch if we currently have EDHREC themes (don't overwrite local archetype fallback)
-    if (useStore.getState().themeSource !== 'edhrec') return;
+    // Always clear the no-data flag when settings change so the button re-enables
+    setNoDataForSettings(false);
 
-    // Clear any previous deselection notice
-    setDeselectedThemes([]);
+    // Only re-fetch if we have (or had) EDHREC themes (don't overwrite local archetype fallback from initial load)
+    const { themeSource, themesError } = useStore.getState();
+    if (themeSource !== 'edhrec' && !themesError) return;
+
+
 
     async function refreshThemesForBracket() {
       setThemesLoading(true);
@@ -415,7 +371,7 @@ export function BuilderPage() {
             .map(t => t.name);
 
           if (lost.length > 0) {
-            setDeselectedThemes(lost);
+
             setToastMessage(`${lost.join(', ')} ${lost.length === 1 ? 'was' : 'were'} deselected — not available with current settings`);
           }
 
@@ -432,55 +388,23 @@ export function BuilderPage() {
 
           setSelectedThemes(themeResults);
         } else {
-          // No themes at this bracket — fall back to local archetype detection
-          setThemesError(`No EDHREC themes available at bracket ${currentBracket}`);
-          const archetypes = detectArchetypes(commander!, partnerCommander ?? undefined);
-          if (archetypes.length > 0) {
-            const localThemes: ThemeResult[] = archetypes.slice(0, 3).map((a, index) => ({
-              name: ARCHETYPE_LABELS[a.archetype],
-              source: 'local' as const,
-              archetype: a.archetype,
-              score: a.score,
-              confidence: a.confidence,
-              isSelected: index === 0,
-            }));
-            setSelectedThemes(localThemes);
-          }
-          // All previously selected themes were lost
+          // No themes at this bracket/budget
+          setNoDataForSettings(true);
+          setThemesError('No EDHREC themes available for this combination');
           const lostNames = selectedThemes.filter(t => t.isSelected).map(t => t.name);
           if (lostNames.length > 0) {
-            setDeselectedThemes(lostNames);
+
             setToastMessage(`${lostNames.join(', ')} ${lostNames.length === 1 ? 'was' : 'were'} deselected — not available with current settings`);
           }
         }
       } catch {
         // EDHREC has no data for this combination (e.g., cEDH + budget returns 403)
-        // Clear themes and show error state
         console.warn('[BuilderPage] No EDHREC data for this bracket/budget combination');
+        setNoDataForSettings(true);
         setThemesError('No EDHREC data available for this combination');
         setEdhrecNumDecks(null);
 
-        // Deselect all current themes since the data doesn't exist
-        const lostNames = selectedThemes.filter(t => t.isSelected).map(t => t.name);
-        if (lostNames.length > 0) {
-          setDeselectedThemes(lostNames);
-        }
-
         setToastMessage('No EDHREC data for this combination of bracket and budget');
-
-        // Fall back to local archetype detection
-        const archetypes = detectArchetypes(commander!, partnerCommander ?? undefined);
-        if (archetypes.length > 0) {
-          const localThemes: ThemeResult[] = archetypes.slice(0, 3).map((a, index) => ({
-            name: ARCHETYPE_LABELS[a.archetype],
-            source: 'local' as const,
-            archetype: a.archetype,
-            score: a.score,
-            confidence: a.confidence,
-            isSelected: index === 0,
-          }));
-          setSelectedThemes(localThemes);
-        }
       } finally {
         setThemesLoading(false);
       }
@@ -520,7 +444,6 @@ export function BuilderPage() {
         commander,
         partnerCommander,
         colorIdentity,
-        archetype: selectedArchetype,
         customization,
         selectedThemes,
         collectionNames,
@@ -535,7 +458,6 @@ export function BuilderPage() {
       trackEvent('deck_generated', {
         commanderName: commander.name,
         partnerName: partnerCommander?.name,
-        archetype: selectedArchetype,
         deckFormat: customization.deckFormat,
         themes: selectedThemes.filter(t => t.isSelected).map(t => t.name),
         collectionMode: !!customization.collectionMode,
@@ -759,10 +681,7 @@ export function BuilderPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
-                <ArchetypeDisplay
-                  deselectedThemes={deselectedThemes}
-                  onDismissDeselected={() => setDeselectedThemes([])}
-                />
+                <ArchetypeDisplay />
               </CardContent>
             </Card>
 
@@ -824,10 +743,19 @@ export function BuilderPage() {
             <Button
               size="lg"
               onClick={handleGenerate}
-              disabled={isLoading}
+              disabled={isLoading || themesLoading || noDataForSettings}
               className="min-w-56 h-14 text-lg glow hover-lift"
             >
-              {isLoading ? (
+              {themesLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Loading EDHREC data...
+                </>
+              ) : noDataForSettings ? (
+                <>
+                  No EDHREC data — adjust bracket or budget
+                </>
+              ) : isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   {progress || loadingMessage}

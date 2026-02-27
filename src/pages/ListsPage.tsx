@@ -350,7 +350,7 @@ export function ListsPage() {
         </button>
         <button
           onClick={() => setViewState({ view: 'banlist-browse' })}
-          className="flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-500 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <Shield className="w-3.5 h-3.5" />
           Ban Lists

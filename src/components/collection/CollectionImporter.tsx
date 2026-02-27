@@ -8,10 +8,24 @@ import { trackEvent } from '@/services/analytics';
 interface ImportResult {
   added: number;
   updated: number;
+  updatedLabel?: string;
   notFound: string[];
 }
 
-export function CollectionImporter() {
+interface CollectionImporterProps {
+  /**
+   * When provided, Scryfall-validated canonical card names are passed here
+   * instead of importing to the collection DB.
+   * Return { added, updated } counts for display in the result card.
+   */
+  onImportCards?: (validatedNames: string[]) => { added: number; updated: number };
+  /** Label for the "updated" count (default: "cards updated") */
+  updatedLabel?: string;
+  /** Header label (default: "Import Collection") */
+  label?: string;
+}
+
+export function CollectionImporter({ onImportCards, updatedLabel, label }: CollectionImporterProps = {}) {
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState('');
@@ -41,39 +55,49 @@ export function CollectionImporter() {
         setProgress(`Validating cards... ${fetched}/${total}`);
       });
 
-      // Build validated list with canonical names + metadata
-      const validated: BulkImportCard[] = [];
+      // Separate validated from not-found
       const notFound: string[] = [];
+      const validatedNames: string[] = [];
+      const validatedParsed: { name: string; quantity: number; card: typeof cardMap extends Map<string, infer V> ? V : never }[] = [];
 
       for (const { name, quantity } of parsed) {
         const scryfallCard = cardMap.get(name);
         if (scryfallCard) {
-          validated.push({
-            name: scryfallCard.name,
-            quantity,
-            typeLine: scryfallCard.type_line,
-            colorIdentity: scryfallCard.color_identity,
-            cmc: scryfallCard.cmc,
-            manaCost: scryfallCard.mana_cost,
-            rarity: scryfallCard.rarity,
-            imageUrl: getCardImageUrl(scryfallCard, 'small'),
-          });
+          validatedNames.push(scryfallCard.name);
+          validatedParsed.push({ name: scryfallCard.name, quantity, card: scryfallCard });
         } else {
           notFound.push(name);
         }
       }
 
-      if (validated.length > 0) {
-        setProgress(`Saving ${validated.length} cards...`);
-        const { added, updated } = await bulkImport(validated);
-        setResult({ added, updated, notFound });
-        trackEvent('collection_imported', {
-          cardCount: validated.length + notFound.length,
-          added,
-          updated,
-        });
+      if (onImportCards) {
+        // Custom handler (e.g. adding to a list)
+        const counts = onImportCards(validatedNames);
+        setResult({ ...counts, updatedLabel, notFound });
       } else {
-        setResult({ added: 0, updated: 0, notFound });
+        // Default: import to collection DB
+        if (validatedParsed.length > 0) {
+          setProgress(`Saving ${validatedParsed.length} cards...`);
+          const bulkCards: BulkImportCard[] = validatedParsed.map(({ name, quantity, card }) => ({
+            name,
+            quantity,
+            typeLine: card.type_line,
+            colorIdentity: card.color_identity,
+            cmc: card.cmc,
+            manaCost: card.mana_cost,
+            rarity: card.rarity,
+            imageUrl: getCardImageUrl(card, 'small'),
+          }));
+          const { added, updated } = await bulkImport(bulkCards);
+          setResult({ added, updated, notFound });
+          trackEvent('collection_imported', {
+            cardCount: validatedParsed.length + notFound.length,
+            added,
+            updated,
+          });
+        } else {
+          setResult({ added: 0, updated: 0, notFound });
+        }
       }
 
       setImportText('');
@@ -103,11 +127,13 @@ export function CollectionImporter() {
     e.target.value = '';
   };
 
+  const updatedText = result?.updatedLabel ?? 'cards updated';
+
   return (
     <div className="space-y-4">
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium">Import Collection</label>
+          <label className="text-sm font-medium">{label ?? 'Import Collection'}</label>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
@@ -185,7 +211,7 @@ export function CollectionImporter() {
           <p className="text-xs text-muted-foreground">
             {result.added > 0 && `${result.added} cards added`}
             {result.added > 0 && result.updated > 0 && ', '}
-            {result.updated > 0 && `${result.updated} cards updated`}
+            {result.updated > 0 && `${result.updated} ${updatedText}`}
             {result.added === 0 && result.updated === 0 && 'No new cards added'}
           </p>
           {result.notFound.length > 0 && (

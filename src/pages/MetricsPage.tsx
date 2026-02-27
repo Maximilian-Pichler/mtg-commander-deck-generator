@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchMetrics } from '@/services/analytics';
-import { Loader2, BarChart3, Users, Wand2, Calendar, AlertCircle, Globe, Sliders, Zap, ChevronDown } from 'lucide-react';
+import { Loader2, BarChart3, Users, Wand2, Calendar, AlertCircle, Globe, Sliders, Zap, ChevronDown, List } from 'lucide-react';
 
 
 interface FeatureAdoption {
@@ -14,6 +14,17 @@ interface FeatureAdoption {
   hasMusts: number;
   hasBans: number;
   deckCount: number;
+}
+
+interface ListActivity {
+  created: number;
+  deleted: number;
+  exported: number;
+  toggledOn: number;
+  toggledOff: number;
+  totalCardsInCreated: number;
+  includeToggles: number;
+  excludeToggles: number;
 }
 
 interface MetricsSummary {
@@ -33,6 +44,7 @@ interface MetricsSummary {
   regionCounts: Record<string, number>;
   deviceCounts: Record<string, number>;
   featureAdoption: FeatureAdoption;
+  listActivity?: ListActivity;
   settingsCounts: Record<string, Record<string, number>>;
   dateRange: { from: string; to: string };
 }
@@ -54,6 +66,10 @@ const EVENT_LABELS: Record<string, string> = {
   theme_toggled: 'Theme Toggles',
   combos_viewed: 'Combos Viewed',
   collection_imported: 'Collection Imports',
+  list_created: 'Lists Created',
+  list_deleted: 'Lists Deleted',
+  list_exported: 'Lists Exported',
+  list_toggled: 'List Toggles',
 };
 
 const REGION_FLAGS: Record<string, string> = {
@@ -229,6 +245,7 @@ export function MetricsPage() {
     { key: 'deck_generated', label: 'Decks' },
     { key: 'page_viewed', label: 'Page Views' },
     { key: 'commander_searched', label: 'Searches' },
+    { key: 'list_created', label: 'Lists' },
   ];
 
   const sortedSlots: [string, number][] = (() => {
@@ -442,8 +459,8 @@ export function MetricsPage() {
             </Card>
           </div>
 
-          {/* Row: Regions + Devices + Feature Adoption */}
-          <div className="grid md:grid-cols-3 gap-6">
+          {/* Row: Regions + Devices + Feature Adoption + List Activity */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="bg-card/80 backdrop-blur-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -520,6 +537,45 @@ export function MetricsPage() {
                     <p className="text-sm text-muted-foreground">No deck data yet</p>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/80 backdrop-blur-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <List className="w-4 h-4" />
+                  List Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const la = data.listActivity;
+                  if (!la || (la.created + la.deleted + la.exported + la.toggledOn + la.toggledOff) === 0) {
+                    return <p className="text-sm text-muted-foreground">No list activity yet</p>;
+                  }
+                  const rows = [
+                    { label: 'Lists Created', count: la.created },
+                    { label: 'Lists Exported', count: la.exported },
+                    { label: 'Lists Deleted', count: la.deleted },
+                    { label: 'Toggled On', count: la.toggledOn },
+                    { label: 'Toggled Off', count: la.toggledOff },
+                    { label: 'As Include', count: la.includeToggles },
+                    { label: 'As Exclude', count: la.excludeToggles },
+                  ].filter(r => r.count > 0);
+                  const maxCount = Math.max(...rows.map(r => r.count), 1);
+                  return (
+                    <div className="space-y-3">
+                      {rows.map(({ label, count }) => (
+                        <BarRow key={label} label={label} count={count} max={maxCount} />
+                      ))}
+                      {la.created > 0 && (
+                        <p className="text-[10px] text-muted-foreground mt-2">
+                          Avg {Math.round(la.totalCardsInCreated / la.created)} cards/list
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>

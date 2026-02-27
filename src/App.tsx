@@ -3,9 +3,12 @@ import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-ro
 import { HomePage } from '@/pages/HomePage';
 import { BuilderPage } from '@/pages/BuilderPage';
 import { CollectionPage } from '@/pages/CollectionPage';
+import { ListsPage } from '@/pages/ListsPage';
 import { useStore } from '@/store';
 import { useCollection } from '@/hooks/useCollection';
+import { loadUserLists } from '@/hooks/useUserLists';
 import { trackEvent } from '@/services/analytics';
+import { getBanList } from '@/services/scryfall/client';
 import type { ScryfallCard } from '@/types';
 
 // Lazy-load MetricsPage — only imported in dev, completely excluded from prod bundle
@@ -89,9 +92,10 @@ function CommanderBackground({ commander, deckGenerated }: { commander: Scryfall
 function Layout({ children }: { children: React.ReactNode }) {
   const { commander, generatedDeck, reset } = useStore();
   const { count: collectionCount } = useCollection();
+  const userListCount = loadUserLists().length;
   const navigate = useNavigate();
   const location = useLocation();
-  const isCollectionPage = location.pathname === '/collection';
+  const isCollectionPage = location.pathname === '/collection' || location.pathname === '/lists';
 
   // Track page views
   useEffect(() => {
@@ -100,6 +104,41 @@ function Layout({ children }: { children: React.ReactNode }) {
       path: location.pathname,
     });
   }, [location.pathname]);
+
+  // Refresh ALL preset ban lists on app load (skip Commander — always applied via EDHREC)
+  useEffect(() => {
+    const PRESET_FORMATS: Record<string, string> = {
+      'brawl-banlist': 'brawl',
+      'standardbrawl-banlist': 'standard',
+      'pedh-banlist': 'paupercommander',
+    };
+    const { customization, updateCustomization } = useStore.getState();
+    const banLists = customization.banLists || [];
+    const toRefresh = banLists.filter(l => l.isPreset && PRESET_FORMATS[l.id]);
+    if (toRefresh.length === 0) return;
+
+    Promise.all(
+      toRefresh.map(list =>
+        getBanList(PRESET_FORMATS[list.id])
+          .then(cards => ({ id: list.id, cards }))
+          .catch(() => null)
+      )
+    ).then(results => {
+      const { customization: current } = useStore.getState();
+      let updated = [...(current.banLists || [])];
+      let changed = false;
+      for (const result of results) {
+        if (!result) continue;
+        const idx = updated.findIndex(l => l.id === result.id);
+        if (idx !== -1 && (updated[idx].cards.length !== result.cards.length ||
+            !result.cards.every(c => updated[idx].cards.includes(c)))) {
+          updated[idx] = { ...updated[idx], cards: result.cards };
+          changed = true;
+        }
+      }
+      if (changed) updateCustomization({ banLists: updated });
+    });
+  }, []);
 
   const handleLogoClick = () => {
     reset();
@@ -143,8 +182,23 @@ function Layout({ children }: { children: React.ReactNode }) {
                   </button>
                 )}
                 <button
+                  onClick={() => navigate('/lists')}
+                  className={`text-xs transition-colors px-2 py-1 rounded-md flex items-center gap-1.5 ${
+                    location.pathname === '/lists' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
+                >
+                  My Lists
+                  {userListCount > 0 && (
+                    <span className="text-[10px] font-medium bg-primary/20 text-primary px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                      {userListCount}
+                    </span>
+                  )}
+                </button>
+                <button
                   onClick={() => navigate('/collection')}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-accent flex items-center gap-1.5"
+                  className={`text-xs transition-colors px-2 py-1 rounded-md flex items-center gap-1.5 ${
+                    location.pathname === '/collection' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
                 >
                   My Collection
                   {collectionCount > 0 && (
@@ -228,6 +282,7 @@ function App() {
         <Route path="/" element={<Layout><HomePage /></Layout>} />
         <Route path="/build/:commanderName/:partnerName?" element={<Layout><BuilderPage /></Layout>} />
         <Route path="/collection" element={<Layout><CollectionPage /></Layout>} />
+        <Route path="/lists" element={<Layout><ListsPage /></Layout>} />
         {import.meta.env.DEV && MetricsPage && (
           <Route path="/metrics" element={<Layout><Suspense fallback={null}><MetricsPage /></Suspense></Layout>} />
         )}

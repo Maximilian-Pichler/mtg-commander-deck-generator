@@ -1,39 +1,36 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { useNavigate } from 'react-router-dom';
-import { useCollection } from '@/hooks/useCollection';
+import type { UserCardList, ScryfallCard } from '@/types';
+import { getCardsByNames, getCardImageUrl, getCardByName } from '@/services/scryfall/client';
 import { ManaCost, CardTypeIcon } from '@/components/ui/mtg-icons';
 import { CardPreviewModal } from '@/components/ui/CardPreviewModal';
-import { getCardByName } from '@/services/scryfall/client';
 import {
-  Search, Trash2, Minus, Plus, Download, AlertTriangle,
-  Grid3X3, List, ChevronDown, RefreshCw, Loader2,
-  ChevronLeft, ChevronRight, X,
+  ArrowLeft, Search, X, Grid3X3, List, Copy, CopyPlus, Pencil, Trash2,
+  ChevronDown, ChevronLeft, ChevronRight, Loader2,
 } from 'lucide-react';
-import type { CollectionCard } from '@/services/collection/db';
-import type { ScryfallCard } from '@/types';
 
-// --- Constants ---
+// --- Constants (mirroring CollectionManager) ---
 
 const COLORS = [
-  { code: 'W', label: 'White', bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-200' },
-  { code: 'U', label: 'Blue', bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-200' },
-  { code: 'B', label: 'Black', bg: 'bg-zinc-200 dark:bg-zinc-800', text: 'text-zinc-800 dark:text-zinc-200' },
-  { code: 'R', label: 'Red', bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-200' },
-  { code: 'G', label: 'Green', bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-200' },
-  { code: 'C', label: 'Colorless', bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-800 dark:text-slate-200' },
+  { code: 'W', label: 'White' },
+  { code: 'U', label: 'Blue' },
+  { code: 'B', label: 'Black' },
+  { code: 'R', label: 'Red' },
+  { code: 'G', label: 'Green' },
+  { code: 'C', label: 'Colorless' },
 ];
 
 const TYPES = ['Battle', 'Creature', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Planeswalker', 'Land'];
 
 const RARITIES = [
-  { code: 'common', label: 'Common', color: 'text-zinc-500' },
-  { code: 'uncommon', label: 'Uncommon', color: 'text-slate-400' },
-  { code: 'rare', label: 'Rare', color: 'text-amber-500' },
-  { code: 'mythic', label: 'Mythic', color: 'text-orange-500' },
+  { code: 'common', label: 'Common' },
+  { code: 'uncommon', label: 'Uncommon' },
+  { code: 'rare', label: 'Rare' },
+  { code: 'mythic', label: 'Mythic' },
 ];
 
-type SortKey = 'name' | 'quantity' | 'cmc' | 'type' | 'rarity' | 'added';
+type SortKey = 'name' | 'cmc' | 'type' | 'rarity';
 type ViewMode = 'grid' | 'list';
 type ColorFilterMode = 'at-least' | 'exact' | 'exclude';
 
@@ -42,14 +39,25 @@ const ITEMS_PER_PAGE_LIST = 50;
 
 const RARITY_ORDER: Record<string, number> = { common: 0, uncommon: 1, rare: 2, mythic: 3 };
 
-// --- Helpers ---
+// Enriched card data (like CollectionCard but for list items)
+interface ListCardData {
+  name: string;
+  typeLine?: string;
+  colorIdentity?: string[];
+  cmc?: number;
+  manaCost?: string;
+  rarity?: string;
+  imageUrl?: string;
+}
 
-function matchesType(card: CollectionCard, type: string): boolean {
+// --- Helpers (same as CollectionManager) ---
+
+function matchesType(card: ListCardData, type: string): boolean {
   if (!card.typeLine) return false;
   return card.typeLine.toLowerCase().includes(type.toLowerCase());
 }
 
-function matchesColor(card: CollectionCard, selectedColors: Set<string>, mode: ColorFilterMode): boolean {
+function matchesColor(card: ListCardData, selectedColors: Set<string>, mode: ColorFilterMode): boolean {
   if (selectedColors.size === 0) return true;
 
   const cardColors = card.colorIdentity ?? [];
@@ -76,56 +84,135 @@ function matchesColor(card: CollectionCard, selectedColors: Set<string>, mode: C
   }
 }
 
-function sortCards(cards: CollectionCard[], sortKey: SortKey, sortDir: 'asc' | 'desc'): CollectionCard[] {
+function sortCards(cards: ListCardData[], sortKey: SortKey, sortDir: 'asc' | 'desc'): ListCardData[] {
   const dir = sortDir === 'asc' ? 1 : -1;
   return [...cards].sort((a, b) => {
     switch (sortKey) {
       case 'name':
         return dir * a.name.localeCompare(b.name);
-      case 'quantity':
-        return dir * (a.quantity - b.quantity);
       case 'cmc':
         return dir * ((a.cmc ?? 99) - (b.cmc ?? 99));
       case 'type':
         return dir * (a.typeLine ?? '').localeCompare(b.typeLine ?? '');
       case 'rarity':
         return dir * ((RARITY_ORDER[a.rarity ?? ''] ?? 5) - (RARITY_ORDER[b.rarity ?? ''] ?? 5));
-      case 'added':
-        return dir * (a.addedAt - b.addedAt);
       default:
         return 0;
     }
   });
 }
 
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+  });
+}
+
+function getPageNumbers(current: number, total: number): (number | null)[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | null)[] = [1];
+  if (current > 3) pages.push(null);
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (current < total - 2) pages.push(null);
+  if (pages[pages.length - 1] !== total) pages.push(total);
+  return pages;
+}
+
+// --- Props ---
+
+interface ListDetailViewProps {
+  list: UserCardList;
+  onBack: () => void;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onExport: () => void;
+  onDelete: () => void;
+  onRemoveCard: (cardName: string) => void;
+}
+
 // --- Component ---
 
-export function CollectionManager() {
+export function ListDetailView({ list, onBack, onEdit, onDuplicate, onExport, onDelete, onRemoveCard }: ListDetailViewProps) {
   const navigate = useNavigate();
-  const {
-    cards, count, removeCard, updateQuantity, clearCollection,
-    needsEnrichment, isEnriching, enrichProgress, enrichCollection,
-  } = useCollection();
 
+  // Card data enrichment
+  const [cardDataMap, setCardDataMap] = useState<Map<string, ListCardData>>(new Map());
+  const [loading, setLoading] = useState(false);
+  const [scryfallMap, setScryfallMap] = useState<Map<string, ScryfallCard>>(new Map());
+
+  // Preview
   const [previewCard, setPreviewCard] = useState<ScryfallCard | null>(null);
+
+  // Delete confirmation
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const handleDeleteClick = () => {
+    if (confirmingDelete) {
+      onDelete();
+    } else {
+      setConfirmingDelete(true);
+      setTimeout(() => setConfirmingDelete(false), 3000);
+    }
+  };
+
+  // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedColors, setSelectedColors] = useState<Set<string>>(new Set());
   const [colorFilterMode, setColorFilterMode] = useState<ColorFilterMode>('at-least');
-  const [selectedType, setSelectedType] = useState<string>('');
-  const [selectedRarity, setSelectedRarity] = useState<string>('');
+  const [selectedType, setSelectedType] = useState('');
+  const [selectedRarity, setSelectedRarity] = useState('');
   const [commandersOnly, setCommandersOnly] = useState(false);
+
+  // Sort & View
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [page, setPage] = useState(1);
-  const [copiedCount, setCopiedCount] = useState<number | null>(null);
+
+  // Fetch card data from Scryfall
+  useEffect(() => {
+    const missing = list.cards.filter(name => !cardDataMap.has(name));
+    if (missing.length === 0) return;
+
+    setLoading(true);
+    getCardsByNames(missing).then(fetchedMap => {
+      const newCards = new Map(cardDataMap);
+      const newScryfall = new Map(scryfallMap);
+
+      for (const name of missing) {
+        const card = fetchedMap.get(name);
+        if (card) {
+          newCards.set(name, {
+            name,
+            typeLine: card.type_line,
+            colorIdentity: card.color_identity,
+            cmc: card.cmc,
+            manaCost: card.mana_cost ?? card.card_faces?.[0]?.mana_cost,
+            rarity: card.rarity,
+            imageUrl: getCardImageUrl(card, 'small'),
+          });
+          newScryfall.set(name, card);
+        } else {
+          newCards.set(name, { name });
+        }
+      }
+
+      setCardDataMap(newCards);
+      setScryfallMap(newScryfall);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [list.cards]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build enriched cards array
+  const enrichedCards = useMemo(() => {
+    return list.cards.map(name => cardDataMap.get(name) ?? { name });
+  }, [list.cards, cardDataMap]);
 
   // Filter & sort
   const filteredCards = useMemo(() => {
-    let result = cards;
+    let result = enrichedCards;
 
-    // Text search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(c =>
@@ -134,22 +221,18 @@ export function CollectionManager() {
       );
     }
 
-    // Color filter
     if (selectedColors.size > 0) {
       result = result.filter(c => matchesColor(c, selectedColors, colorFilterMode));
     }
 
-    // Type filter
     if (selectedType) {
       result = result.filter(c => matchesType(c, selectedType));
     }
 
-    // Rarity filter
     if (selectedRarity) {
       result = result.filter(c => c.rarity === selectedRarity);
     }
 
-    // Commanders only
     if (commandersOnly) {
       result = result.filter(c => {
         const t = c.typeLine?.toLowerCase() ?? '';
@@ -158,7 +241,7 @@ export function CollectionManager() {
     }
 
     return sortCards(result, sortKey, sortDir);
-  }, [cards, searchQuery, selectedColors, colorFilterMode, selectedType, selectedRarity, commandersOnly, sortKey, sortDir]);
+  }, [enrichedCards, searchQuery, selectedColors, colorFilterMode, selectedType, selectedRarity, commandersOnly, sortKey, sortDir]);
 
   // Pagination
   const itemsPerPage = viewMode === 'grid' ? ITEMS_PER_PAGE_GRID : ITEMS_PER_PAGE_LIST;
@@ -171,14 +254,13 @@ export function CollectionManager() {
 
   // Stats
   const stats = useMemo(() => {
-    const totalQuantity = cards.reduce((sum, c) => sum + c.quantity, 0);
     const typeBreakdown: Record<string, number> = {};
-    for (const card of cards) {
+    for (const card of enrichedCards) {
       const mainType = TYPES.find(t => matchesType(card, t)) ?? 'Other';
       typeBreakdown[mainType] = (typeBreakdown[mainType] ?? 0) + 1;
     }
-    return { totalQuantity, typeBreakdown };
-  }, [cards]);
+    return { typeBreakdown };
+  }, [enrichedCards]);
 
   const activeFilters = (selectedColors.size > 0 ? 1 : 0) + (selectedType ? 1 : 0) + (selectedRarity ? 1 : 0) + (commandersOnly ? 1 : 0);
 
@@ -211,136 +293,118 @@ export function CollectionManager() {
     setPage(1);
   };
 
-  const handleExport = () => {
-    const text = cards.map(c => `${c.quantity} ${c.name}`).join('\n');
-    const totalCards = cards.reduce((sum, c) => sum + c.quantity, 0);
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedCount(totalCards);
-      setTimeout(() => setCopiedCount(null), 2000);
-    });
-  };
-
   const handlePreview = useCallback(async (name: string) => {
+    // Use cached scryfall card if available
+    const cached = scryfallMap.get(name);
+    if (cached) {
+      setPreviewCard(cached);
+      return;
+    }
     try {
       const card = await getCardByName(name);
       if (card) setPreviewCard(card);
     } catch {
       // silently fail
     }
-  }, []);
+  }, [scryfallMap]);
 
   const handleBuildDeck = useCallback((cardName: string) => {
     navigate(`/build/${encodeURIComponent(cardName)}`);
   }, [navigate]);
 
-  if (count === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        <p className="text-sm">Your collection is empty.</p>
-        <p className="text-xs mt-1">Use the importer above to add cards.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      {/* Header: Stats + Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <span className="text-sm font-semibold">
-            {count.toLocaleString()} unique cards
-          </span>
-          <span className="text-xs text-muted-foreground ml-2">
-            ({stats.totalQuantity.toLocaleString()} total)
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          {needsEnrichment > 0 && (
+      {/* Header */}
+      <div>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to lists
+        </button>
+
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold">{list.name}</h2>
+            {list.description && (
+              <p className="text-sm text-muted-foreground mt-1">{list.description}</p>
+            )}
+            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+              <span>{list.cards.length} cards</span>
+              <span className="text-border">·</span>
+              <span>Created {formatDate(list.createdAt)}</span>
+              <span className="text-border">·</span>
+              <span>Updated {formatDate(list.updatedAt)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={enrichCollection}
-              disabled={isEnriching}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-              title={`${needsEnrichment} cards missing metadata — click to fetch from Scryfall`}
+              onClick={onEdit}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
             >
-              {isEnriching ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
-              )}
-              {isEnriching ? 'Enriching...' : `Enrich ${needsEnrichment} cards`}
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
             </button>
-          )}
-          <button
-            onClick={handleExport}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Copy collection to clipboard"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setShowClearConfirm(true)}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-            title="Clear collection"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            <button
+              onClick={onDuplicate}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <CopyPlus className="w-3.5 h-3.5" />
+              Duplicate
+            </button>
+            <button
+              onClick={onExport}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Export
+            </button>
+            <button
+              onClick={handleDeleteClick}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                confirmingDelete
+                  ? 'border-destructive/50 bg-destructive/20 text-destructive'
+                  : 'border-border hover:bg-destructive/10 text-muted-foreground hover:text-destructive'
+              }`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {confirmingDelete ? 'Confirm?' : 'Delete'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Enrichment progress */}
-      {enrichProgress && (
+      {/* Loading indicator */}
+      {loading && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          {enrichProgress}
-        </div>
-      )}
-
-      {/* Clear confirmation */}
-      {showClearConfirm && (
-        <div className="p-3 rounded-lg border border-destructive/50 bg-destructive/10 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-            <AlertTriangle className="w-4 h-4" />
-            Clear entire collection?
-          </div>
-          <p className="text-xs text-muted-foreground">
-            This will remove all {count.toLocaleString()} cards. This cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setShowClearConfirm(false)}
-              className="px-3 py-1.5 text-xs rounded-md hover:bg-accent transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => { clearCollection(); setShowClearConfirm(false); }}
-              className="px-3 py-1.5 text-xs bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 transition-colors"
-            >
-              Clear All
-            </button>
-          </div>
+          Loading card data...
         </div>
       )}
 
       {/* Type breakdown chips */}
-      <div className="flex flex-wrap gap-1.5">
-        {Object.entries(stats.typeBreakdown)
-          .sort((a, b) => b[1] - a[1])
-          .map(([type, num]) => (
-            <button
-              key={type}
-              onClick={() => { setSelectedType(prev => prev === type ? '' : type); setPage(1); }}
-              className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full transition-colors cursor-pointer ${
-                selectedType === type
-                  ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
-                  : 'bg-accent/60 text-muted-foreground hover:bg-accent'
-              }`}
-            >
-              <CardTypeIcon type={type} size="sm" className="opacity-70" />
-              {type} {num}
-            </button>
-          ))}
-      </div>
+      {Object.keys(stats.typeBreakdown).length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(stats.typeBreakdown)
+            .sort((a, b) => b[1] - a[1])
+            .map(([type, num]) => (
+              <button
+                key={type}
+                onClick={() => { setSelectedType(prev => prev === type ? '' : type); setPage(1); }}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full transition-colors cursor-pointer ${
+                  selectedType === type
+                    ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
+                    : 'bg-accent/60 text-muted-foreground hover:bg-accent'
+                }`}
+              >
+                <CardTypeIcon type={type} size="sm" className="opacity-70" />
+                {type} {num}
+              </button>
+            ))}
+        </div>
+      )}
 
       {/* Search + View Toggle */}
       <div className="flex gap-2">
@@ -384,7 +448,7 @@ export function CollectionManager() {
       <div className="flex flex-wrap items-center gap-2">
         {/* Color filter chips */}
         <div className="flex items-center gap-1">
-          {COLORS.map(({ code }) => (
+          {COLORS.map(({ code, label }) => (
             <button
               key={code}
               onClick={() => toggleColor(code)}
@@ -393,7 +457,7 @@ export function CollectionManager() {
                   ? 'ring-2 ring-primary ring-offset-1 ring-offset-background scale-110'
                   : 'opacity-50 hover:opacity-80'
               }`}
-              title={COLORS.find(c => c.code === code)?.label}
+              title={label}
             >
               <i className={`ms ms-${code.toLowerCase()} ms-cost text-sm`} />
             </button>
@@ -483,12 +547,10 @@ export function CollectionManager() {
             <option value="name-desc">Name Z→A</option>
             <option value="cmc-asc">CMC Low→High</option>
             <option value="cmc-desc">CMC High→Low</option>
-            <option value="quantity-desc">Qty High→Low</option>
-            <option value="quantity-asc">Qty Low→High</option>
             <option value="rarity-desc">Rarity High→Low</option>
             <option value="rarity-asc">Rarity Low→High</option>
-            <option value="added-desc">Newest First</option>
-            <option value="added-asc">Oldest First</option>
+            <option value="type-asc">Type A→Z</option>
+            <option value="type-desc">Type Z→A</option>
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
         </div>
@@ -516,15 +578,13 @@ export function CollectionManager() {
       {viewMode === 'grid' ? (
         <GridView
           cards={paginatedCards}
-          onUpdateQuantity={updateQuantity}
-          onRemove={removeCard}
+          onRemove={onRemoveCard}
           onPreview={handlePreview}
         />
       ) : (
-        <ListView
+        <ListViewTable
           cards={paginatedCards}
-          onUpdateQuantity={updateQuantity}
-          onRemove={removeCard}
+          onRemove={onRemoveCard}
           onPreview={handlePreview}
           sortKey={sortKey}
           sortDir={sortDir}
@@ -545,6 +605,10 @@ export function CollectionManager() {
         </div>
       )}
 
+      {list.cards.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-8">This list is empty. Click Edit to add cards.</p>
+      )}
+
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-2">
@@ -559,7 +623,6 @@ export function CollectionManager() {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            {/* Page number buttons */}
             {getPageNumbers(currentPage, totalPages).map((p, i) =>
               p === null ? (
                 <span key={`ellipsis-${i}`} className="px-1 text-xs text-muted-foreground">...</span>
@@ -589,12 +652,6 @@ export function CollectionManager() {
       )}
 
       <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} onBuildDeck={handleBuildDeck} />
-
-      {copiedCount !== null && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-2 bg-emerald-500/90 text-white text-sm rounded-lg shadow-lg animate-fade-in">
-          Copied {copiedCount} cards to clipboard!
-        </div>
-      )}
     </div>
   );
 }
@@ -603,12 +660,10 @@ export function CollectionManager() {
 
 function GridView({
   cards,
-  onUpdateQuantity,
   onRemove,
   onPreview,
 }: {
-  cards: CollectionCard[];
-  onUpdateQuantity: (name: string, qty: number) => void;
+  cards: ListCardData[];
   onRemove: (name: string) => void;
   onPreview: (name: string) => void;
 }) {
@@ -617,13 +672,7 @@ function GridView({
   return (
     <div ref={parent} className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
       {cards.map(card => (
-        <GridCard
-          key={card.name}
-          card={card}
-          onUpdateQuantity={onUpdateQuantity}
-          onRemove={onRemove}
-          onPreview={onPreview}
-        />
+        <GridCard key={card.name} card={card} onRemove={onRemove} onPreview={onPreview} />
       ))}
     </div>
   );
@@ -631,12 +680,10 @@ function GridView({
 
 function GridCard({
   card,
-  onUpdateQuantity,
   onRemove,
   onPreview,
 }: {
-  card: CollectionCard;
-  onUpdateQuantity: (name: string, qty: number) => void;
+  card: ListCardData;
   onRemove: (name: string) => void;
   onPreview: (name: string) => void;
 }) {
@@ -648,7 +695,6 @@ function GridCard({
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
     >
-      {/* Card image */}
       {card.imageUrl ? (
         <img
           src={card.imageUrl}
@@ -666,36 +712,15 @@ function GridCard({
         </div>
       )}
 
-      {/* Quantity badge */}
-      {card.quantity > 1 && (
-        <div className="absolute top-1 right-1 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow min-w-[20px] text-center">
-          x{card.quantity}
-        </div>
-      )}
-
       {/* Hover controls overlay */}
       {showControls && (
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-2 pt-6">
           <p className="text-[10px] text-white font-medium truncate mb-1.5">{card.name}</p>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-0.5">
-              <button
-                onClick={() => onUpdateQuantity(card.name, card.quantity - 1)}
-                className="p-0.5 rounded bg-white/20 text-white hover:bg-white/30 transition-colors"
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-              <span className="text-[10px] font-mono text-white w-5 text-center">{card.quantity}</span>
-              <button
-                onClick={() => onUpdateQuantity(card.name, card.quantity + 1)}
-                className="p-0.5 rounded bg-white/20 text-white hover:bg-white/30 transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
+          <div className="flex items-center justify-end">
             <button
-              onClick={() => onRemove(card.name)}
+              onClick={(e) => { e.stopPropagation(); onRemove(card.name); }}
               className="p-0.5 rounded bg-white/20 text-red-300 hover:bg-red-500/50 hover:text-white transition-colors"
+              title="Remove from list"
             >
               <Trash2 className="w-3 h-3" />
             </button>
@@ -708,17 +733,15 @@ function GridCard({
 
 // --- List View ---
 
-function ListView({
+function ListViewTable({
   cards,
-  onUpdateQuantity,
   onRemove,
   onPreview,
   sortKey,
   sortDir,
   onToggleSort,
 }: {
-  cards: CollectionCard[];
-  onUpdateQuantity: (name: string, qty: number) => void;
+  cards: ListCardData[];
   onRemove: (name: string) => void;
   onPreview: (name: string) => void;
   sortKey: SortKey;
@@ -740,12 +763,11 @@ function ListView({
   return (
     <div className="border border-border/50 rounded-lg overflow-hidden">
       {/* Table header */}
-      <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 px-3 py-2 bg-accent/30 border-b border-border/50 items-center">
+      <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 bg-accent/30 border-b border-border/50 items-center">
         <SortHeader label="Card" field="name" />
         <SortHeader label="Type" field="type" className="w-24 hidden sm:flex" />
         <SortHeader label="CMC" field="cmc" className="w-10 justify-center" />
-        <SortHeader label="Qty" field="quantity" className="w-12 justify-center" />
-        <span className="w-16" />
+        <span className="w-8" />
       </div>
 
       {/* Card rows */}
@@ -753,9 +775,9 @@ function ListView({
         {cards.map(card => (
           <div
             key={card.name}
-            className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 px-3 py-1.5 items-center hover:bg-accent/30 group transition-colors"
+            className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-1.5 items-center hover:bg-accent/30 group transition-colors"
           >
-            {/* Name + color + mana cost */}
+            {/* Name + mana cost */}
             <div
               className="flex items-center gap-2 min-w-0 cursor-pointer"
               onClick={() => onPreview(card.name)}
@@ -782,28 +804,12 @@ function ListView({
               {card.cmc != null ? card.cmc : '—'}
             </span>
 
-            {/* Quantity controls */}
-            <div className="flex items-center gap-0.5 w-12 justify-center">
-              <button
-                onClick={() => onUpdateQuantity(card.name, card.quantity - 1)}
-                className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-              <span className="text-xs font-mono w-5 text-center tabular-nums">{card.quantity}</span>
-              <button
-                onClick={() => onUpdateQuantity(card.name, card.quantity + 1)}
-                className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-
             {/* Remove */}
-            <div className="w-16 flex justify-end">
+            <div className="w-8 flex justify-end">
               <button
                 onClick={() => onRemove(card.name)}
                 className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                title="Remove from list"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -813,24 +819,4 @@ function ListView({
       </div>
     </div>
   );
-}
-
-// --- Pagination helper ---
-
-function getPageNumbers(current: number, total: number): (number | null)[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-
-  const pages: (number | null)[] = [1];
-
-  if (current > 3) pages.push(null);
-
-  const start = Math.max(2, current - 1);
-  const end = Math.min(total - 1, current + 1);
-
-  for (let i = start; i <= end; i++) pages.push(i);
-
-  if (current < total - 2) pages.push(null);
-  if (pages[pages.length - 1] !== total) pages.push(total);
-
-  return pages;
 }

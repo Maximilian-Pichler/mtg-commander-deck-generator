@@ -7,7 +7,11 @@ export type AnalyticsEventType =
   | 'theme_toggled'
   | 'collection_imported'
   | 'combos_viewed'
-  | 'page_viewed';
+  | 'page_viewed'
+  | 'list_created'
+  | 'list_deleted'
+  | 'list_exported'
+  | 'list_toggled';
 
 export interface AnalyticsEventMetadata {
   commander_searched: { query: string; resultCount: number };
@@ -44,6 +48,10 @@ export interface AnalyticsEventMetadata {
   collection_imported: { cardCount: number; added: number; updated: number };
   combos_viewed: { commanderName: string; comboCount: number };
   page_viewed: { page: string; path: string };
+  list_created: { listName: string; cardCount: number };
+  list_deleted: { listName: string; cardCount: number };
+  list_exported: { listName: string; cardCount: number };
+  list_toggled: { listName: string; cardCount: number; mode: 'exclude' | 'include'; enabled: boolean };
 }
 
 export interface AnalyticsEvent {

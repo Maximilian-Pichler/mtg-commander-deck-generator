@@ -82,9 +82,9 @@ function cardMatchesFilter(card: ScryfallCard, filter: StatsFilter): boolean {
 }
 
 // Card type categories for Moxfield-style grouping
-type CardType = 'Commander' | 'Creature' | 'Planeswalker' | 'Instant' | 'Sorcery' | 'Artifact' | 'Enchantment' | 'Land';
+type CardType = 'Commander' | 'Creature' | 'Planeswalker' | 'Battle' | 'Instant' | 'Sorcery' | 'Artifact' | 'Enchantment' | 'Land';
 
-const TYPE_ORDER: CardType[] = ['Commander', 'Planeswalker', 'Creature', 'Artifact', 'Enchantment', 'Instant', 'Sorcery', 'Land'];
+const TYPE_ORDER: CardType[] = ['Commander', 'Planeswalker', 'Creature', 'Battle', 'Artifact', 'Enchantment', 'Instant', 'Sorcery', 'Land'];
 
 // Get primary card type from front face type_line (handles MDFCs like "Instant // Land")
 function getCardType(card: ScryfallCard): CardType {
@@ -92,6 +92,7 @@ function getCardType(card: ScryfallCard): CardType {
 
   if (typeLine.includes('creature')) return 'Creature';
   if (typeLine.includes('planeswalker')) return 'Planeswalker';
+  if (typeLine.includes('battle')) return 'Battle';
   if (typeLine.includes('instant')) return 'Instant';
   if (typeLine.includes('sorcery')) return 'Sorcery';
   if (typeLine.includes('artifact')) return 'Artifact';
@@ -275,6 +276,13 @@ function ExportModal({ isOpen, onClose, generateDeckList, hasMustIncludes, onExp
 
   const deckList = useMemo(() => generateDeckList(excludeMustIncludes), [generateDeckList, excludeMustIncludes]);
 
+  const cardCount = useMemo(() => {
+    return deckList.split('\n').filter(l => l.trim()).reduce((sum, line) => {
+      const match = line.match(/^(\d+)\s/);
+      return sum + (match ? parseInt(match[1], 10) : 1);
+    }, 0);
+  }, [deckList]);
+
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(deckList);
     setCopied(true);
@@ -315,7 +323,7 @@ function ExportModal({ isOpen, onClose, generateDeckList, hasMustIncludes, onExp
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={handleCopy} variant="outline" className="flex-col h-auto py-3">
               {copied ? <Check className="w-5 h-5 mb-1 text-green-500" /> : <Copy className="w-5 h-5 mb-1" />}
-              <span className="text-xs">{copied ? 'Copied!' : 'Copy'}</span>
+              <span className="text-xs">{copied ? `Copied ${cardCount} cards!` : 'Copy'}</span>
             </Button>
             <Button onClick={handleDownload} variant="outline" className="flex-col h-auto py-3">
               <Download className="w-5 h-5 mb-1" />
@@ -738,6 +746,7 @@ export function DeckDisplay() {
       Commander: [],
       Creature: [],
       Planeswalker: [],
+      Battle: [],
       Instant: [],
       Sorcery: [],
       Artifact: [],
@@ -752,6 +761,7 @@ export function DeckDisplay() {
       Commander: new Map(),
       Creature: new Map(),
       Planeswalker: new Map(),
+      Battle: new Map(),
       Instant: new Map(),
       Sorcery: new Map(),
       Artifact: new Map(),

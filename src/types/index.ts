@@ -296,12 +296,38 @@ export type BracketLevel = 'all' | 1 | 2 | 3 | 4 | 5;
 // Max card rarity filter
 export type MaxRarity = 'common' | 'uncommon' | 'rare' | 'mythic' | null;
 
+// Ban list (preset or custom)
+export interface BanList {
+  id: string;
+  name: string;
+  cards: string[];
+  isPreset: boolean;
+  enabled: boolean;
+}
+
+// User-created reusable card list
+export interface UserCardList {
+  id: string;
+  name: string;
+  description: string;
+  cards: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+// Reference to a user list applied as exclude or include
+export interface AppliedList {
+  listId: string;
+  enabled: boolean;
+}
+
 // User customization
 export interface Customization {
   deckFormat: DeckFormat;
   landCount: number;
   nonBasicLandCount: number; // How many non-basic lands to include (rest will be basics)
   bannedCards: string[]; // Card names to exclude from deck generation
+  banLists: BanList[]; // Named ban lists (preset + custom)
   mustIncludeCards: string[]; // Card names to force-include in deck generation (first priority)
   maxCardPrice: number | null; // Max USD price per card, null = no limit
   deckBudget: number | null; // Total deck budget in USD, null = no limit
@@ -315,6 +341,8 @@ export interface Customization {
   comboCount: number; // 0 = none, 1 = a few, 2 = many combo pieces prioritized
   hyperFocus: boolean; // When true, boost unique theme cards and penalize generic multi-theme cards
   currency: 'USD' | 'EUR'; // Price currency for budget filtering and display
+  appliedExcludeLists: AppliedList[]; // User lists toggled on as exclude lists
+  appliedIncludeLists: AppliedList[]; // User lists toggled on as must-include lists
 }
 
 // Store state

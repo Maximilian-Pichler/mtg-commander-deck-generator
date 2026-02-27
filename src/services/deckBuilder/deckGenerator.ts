@@ -24,6 +24,7 @@ import {
   hasCurveRoom,
 } from './curveUtils';
 import { loadTaggerData, hasTaggerData, getTaggerRole } from '@/services/tagger/client';
+import { loadUserLists } from '@/hooks/useUserLists';
 
 interface GenerationContext {
   commander: ScryfallCard;
@@ -525,6 +526,7 @@ function matchesExpectedType(typeLine: string, expectedType: string): boolean {
   if (normalizedType === 'artifact') return normalizedTypeLine.includes('artifact') && !normalizedTypeLine.includes('creature');
   if (normalizedType === 'enchantment') return normalizedTypeLine.includes('enchantment') && !normalizedTypeLine.includes('creature');
   if (normalizedType === 'planeswalker') return normalizedTypeLine.includes('planeswalker');
+  if (normalizedType === 'battle') return normalizedTypeLine.includes('battle');
   if (normalizedType === 'land') return normalizedTypeLine.includes('land');
 
   return false;
@@ -1029,6 +1031,7 @@ function calculateStats(categories: Record<DeckCategory, ScryfallCard[]>): DeckS
     else if (typeLine.includes('enchantment')) typeDistribution['Enchantment'] = (typeDistribution['Enchantment'] || 0) + 1;
     else if (typeLine.includes('land')) typeDistribution['Land'] = (typeDistribution['Land'] || 0) + 1;
     else if (typeLine.includes('planeswalker')) typeDistribution['Planeswalker'] = (typeDistribution['Planeswalker'] || 0) + 1;
+    else if (typeLine.includes('battle')) typeDistribution['Battle'] = (typeDistribution['Battle'] || 0) + 1;
   });
 
   return {
@@ -1110,6 +1113,18 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
   const format = customization.deckFormat;
   const usedNames = new Set<string>();
   const bannedCards = new Set(customization.bannedCards || []);
+  // Merge enabled ban lists into the banned set
+  for (const list of customization.banLists || []) {
+    if (list.enabled) list.cards.forEach(c => bannedCards.add(c));
+  }
+  // Merge applied exclude user lists
+  const userLists = loadUserLists();
+  for (const ref of customization.appliedExcludeLists || []) {
+    if (ref.enabled) {
+      const list = userLists.find(l => l.id === ref.listId);
+      if (list) list.cards.forEach(c => bannedCards.add(c));
+    }
+  }
   const maxCardPrice = customization.maxCardPrice ?? null;
   const budgetOption = customization.budgetOption !== 'any' ? customization.budgetOption : undefined;
   const bracketLevel = customization.bracketLevel !== 'all' ? customization.bracketLevel : undefined;
@@ -1191,6 +1206,19 @@ export async function generateDeck(context: GenerationContext): Promise<Generate
   const mustIncludeNames = customization.mustIncludeCards?.filter(
     name => !bannedCards.has(name) && !usedNames.has(name)
   ) || [];
+  // Merge applied include user lists
+  for (const ref of customization.appliedIncludeLists || []) {
+    if (ref.enabled) {
+      const list = userLists.find(l => l.id === ref.listId);
+      if (list) {
+        for (const name of list.cards) {
+          if (!bannedCards.has(name) && !usedNames.has(name) && !mustIncludeNames.includes(name)) {
+            mustIncludeNames.push(name);
+          }
+        }
+      }
+    }
+  }
 
   if (mustIncludeNames.length > 0) {
     onProgress?.('Adding your must-include cards...', 3);

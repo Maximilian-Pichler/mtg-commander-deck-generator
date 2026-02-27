@@ -344,6 +344,48 @@ export async function getGameChangerNames(): Promise<Set<string>> {
   return names;
 }
 
+// Cached ban list results by format
+const banListCache = new Map<string, { names: string[]; timestamp: number }>();
+const BAN_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Fetch all cards banned in a given format from Scryfall.
+ * Uses `banned:<format>` search and paginates through all results.
+ */
+export async function getBanList(format: string): Promise<string[]> {
+  const cached = banListCache.get(format);
+  if (cached && Date.now() - cached.timestamp < BAN_CACHE_TTL) {
+    return cached.names;
+  }
+
+  const names: string[] = [];
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore) {
+    try {
+      const response = await scryfallFetch<ScryfallSearchResponse>(
+        `/cards/search?q=${encodeURIComponent(`banned:${format}`)}&unique=cards&order=name&page=${page}`
+      );
+      for (const card of response.data) {
+        names.push(card.name);
+      }
+      hasMore = response.has_more;
+      page++;
+    } catch {
+      break;
+    }
+  }
+
+  banListCache.set(format, { names, timestamp: Date.now() });
+  return names;
+}
+
+/** Convenience alias for commander ban list */
+export async function getCommanderBanList(): Promise<string[]> {
+  return getBanList('commander');
+}
+
 export async function autocompleteCardName(query: string): Promise<string[]> {
   if (!query.trim() || query.length < 2) return [];
 

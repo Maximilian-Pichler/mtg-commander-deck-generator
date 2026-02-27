@@ -360,7 +360,7 @@ export function DeckCustomizer() {
 
         <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${budgetOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
           <div className="overflow-hidden">
-          <div className="mt-3 space-y-4">
+          <div className="mt-3 space-y-6">
             {/* Total Deck Budget */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -381,7 +381,9 @@ export function DeckCustomizer() {
                       onClick={() => { setEditingBudget(false); updateCustomization({ deckBudget: budget }); }}
                       className={`flex-1 py-1.5 px-1 rounded text-xs font-medium transition-colors ${
                         isSelected
-                          ? 'bg-primary/10 border border-primary text-primary'
+                          ? budget === null
+                            ? 'bg-muted border border-muted-foreground/30 text-muted-foreground'
+                            : 'bg-primary/10 border border-primary text-primary'
                           : 'border border-border hover:border-primary/50'
                       }`}
                     >
@@ -437,7 +439,9 @@ export function DeckCustomizer() {
                       onClick={() => { setEditingPrice(false); updateCustomization({ maxCardPrice: price }); }}
                       className={`flex-1 py-1.5 px-1 rounded text-xs font-medium transition-colors ${
                         isSelected
-                          ? 'bg-primary/10 border border-primary text-primary'
+                          ? price === null
+                            ? 'bg-muted border border-muted-foreground/30 text-muted-foreground'
+                            : 'bg-primary/10 border border-primary text-primary'
                           : 'border border-border hover:border-primary/50'
                       }`}
                     >
@@ -571,7 +575,7 @@ export function DeckCustomizer() {
 
         <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${powerLevelOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
           <div className="overflow-hidden">
-          <div className="mt-3 space-y-4">
+          <div className="mt-3 space-y-6">
             {/* Bracket Level */}
             <div>
               <label className="text-sm font-medium mb-2 block">Bracket Level</label>
@@ -740,7 +744,7 @@ export function DeckCustomizer() {
 
         <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${cardListsOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
           <div className="overflow-hidden">
-          <div className="mt-3 space-y-4">
+          <div className="mt-3 space-y-6">
             {/* Must Include Cards */}
             <MustIncludeCards />
 
@@ -859,7 +863,7 @@ export function DeckCustomizer() {
 
         <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${otherOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
           <div className="overflow-hidden">
-          <div className="mt-3 space-y-4">
+          <div className="mt-3 space-y-6">
             <div>
               <label className="text-sm font-medium mb-2 block">Max Card Rarity</label>
               <p className="text-xs text-muted-foreground mb-2">

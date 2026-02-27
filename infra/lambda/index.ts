@@ -120,6 +120,7 @@ async function handleGet(params: Record<string, string>) {
     const uniqueUsers = new Set<string>();
     const newUsers = new Set<string>();
     const returningUsers = new Set<string>();
+    const userFirstSeen = new Map<string, string | null>();
     const fromDay = from.slice(0, 10); // "YYYY-MM-DD" for firstSeen comparison
     const regionCounts: Record<string, number> = {};
     const deviceCounts: Record<string, number> = {};
@@ -133,6 +134,16 @@ async function handleGet(params: Record<string, string>) {
       hasMusts: 0,
       hasBans: 0,
       deckCount: 0,
+    };
+    const listActivity = {
+      created: 0,
+      deleted: 0,
+      exported: 0,
+      toggledOn: 0,
+      toggledOff: 0,
+      totalCardsInCreated: 0,
+      includeToggles: 0,
+      excludeToggles: 0,
     };
     const settingsCounts: Record<string, Record<string, number>> = {
       budgetOption: {},
@@ -179,10 +190,12 @@ async function handleGet(params: Record<string, string>) {
           if (!hourlyUserSets[hour]) hourlyUserSets[hour] = new Set();
           hourlyUserSets[hour].add(meta.userId);
         }
-        // New = first seen within the queried range; returning = before it
+        // Track firstSeen per user — classified after the loop
+        if (!userFirstSeen.has(meta.userId)) {
+          userFirstSeen.set(meta.userId, null);
+        }
         if (typeof meta.firstSeen === 'string' && meta.firstSeen) {
-          if (meta.firstSeen >= fromDay) newUsers.add(meta.userId);
-          else returningUsers.add(meta.userId);
+          userFirstSeen.set(meta.userId, meta.firstSeen);
         }
       }
 
@@ -253,6 +266,29 @@ async function handleGet(params: Record<string, string>) {
           bucket('landCount', landBucket);
         }
       }
+
+      // List activity
+      if (item.event === 'list_created') {
+        listActivity.created++;
+        if (typeof meta?.cardCount === 'number') listActivity.totalCardsInCreated += meta.cardCount;
+      }
+      if (item.event === 'list_deleted') listActivity.deleted++;
+      if (item.event === 'list_exported') listActivity.exported++;
+      if (item.event === 'list_toggled') {
+        if (meta?.enabled === true) listActivity.toggledOn++;
+        else listActivity.toggledOff++;
+        if (meta?.mode === 'include') listActivity.includeToggles++;
+        if (meta?.mode === 'exclude') listActivity.excludeToggles++;
+      }
+    }
+
+    // Classify each user exactly once: new if firstSeen is within query range, else returning
+    for (const [userId, firstSeen] of userFirstSeen) {
+      if (firstSeen && firstSeen >= fromDay) {
+        newUsers.add(userId);
+      } else {
+        returningUsers.add(userId);
+      }
     }
 
     const dailyUniqueUsers: Record<string, number> = {};
@@ -284,6 +320,7 @@ async function handleGet(params: Record<string, string>) {
         regionCounts,
         deviceCounts,
         featureAdoption,
+        listActivity,
         settingsCounts,
         dateRange: { from, to },
       }),

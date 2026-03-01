@@ -1,10 +1,11 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
 import { getCardImageUrl, isDoubleFacedCard, getCardBackFaceUrl, getCardPrice, getFrontFaceTypeLine } from '@/services/scryfall/client';
 import { getDeckFormatConfig } from '@/lib/constants/archetypes';
-import type { ScryfallCard } from '@/types';
+import type { ScryfallCard, DetectedCombo } from '@/types';
 import {
   Copy,
   Check,
@@ -16,6 +17,7 @@ import {
   Search,
   AlertTriangle,
   Info,
+  Sparkles,
 } from 'lucide-react';
 import { CardTypeIcon, ManaCost } from '@/components/ui/mtg-icons';
 import { CardPreviewModal } from '@/components/ui/CardPreviewModal';
@@ -111,6 +113,90 @@ function formatPrice(price: string | null | undefined, sym = '$'): string {
   return `${sym}${num.toFixed(2)}`;
 }
 
+// Combo popover for inline combo indicator
+interface ComboPopoverProps {
+  combos: DetectedCombo[];
+  cardName: string;
+  cardTypeMap?: Map<string, CardType>;
+}
+
+function ComboPopover({ combos, cardName, cardTypeMap }: ComboPopoverProps) {
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const ref = useRef<HTMLSpanElement>(null);
+
+  const show = useCallback(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    setPos({
+      top: rect.top - 8,
+      left: rect.left + rect.width / 2,
+    });
+    setVisible(true);
+  }, []);
+
+  const label = combos.length === 1 ? 'CB' : `CB${combos.length}`;
+
+  return (
+    <span
+      ref={ref}
+      className="ml-1 text-[10px] font-bold text-violet-500/70 cursor-help"
+      onMouseEnter={show}
+      onMouseLeave={() => setVisible(false)}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {label}
+      {visible && createPortal(
+        <div
+          className="pointer-events-none fixed w-72 rounded-lg bg-popover border border-border px-3 py-2.5 text-xs text-popover-foreground leading-relaxed shadow-lg z-[100] animate-fade-in"
+          style={{
+            top: pos.top,
+            left: pos.left,
+            transform: 'translate(-50%, -100%)',
+          }}
+        >
+          <div className="font-semibold text-violet-400 mb-1.5 flex items-center gap-1">
+            <Sparkles className="w-3 h-3" />
+            {combos.length === 1 ? 'Combo' : `${combos.length} Combos`}
+          </div>
+          {combos.map((combo) => (
+            <div key={combo.comboId} className="mb-2 last:mb-0">
+              <div className="flex flex-wrap gap-1 mb-0.5">
+                {combo.cards.map((name) => (
+                  <span
+                    key={name}
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${
+                      name === cardName
+                        ? 'bg-violet-500/20 text-violet-300 font-semibold'
+                        : 'bg-accent/40 text-foreground/80'
+                    }`}
+                  >
+                    {cardTypeMap?.get(name) && (
+                      <CardTypeIcon type={cardTypeMap.get(name)!} size="sm" className="opacity-60" />
+                    )}
+                    {name}
+                  </span>
+                ))}
+              </div>
+              {combo.results.length > 0 && (
+                <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                  {combo.results[0]}
+                </p>
+              )}
+              <span className="text-[9px] text-muted-foreground">
+                {combo.deckCount.toLocaleString()} decks · Bracket {combo.bracket}
+              </span>
+            </div>
+          ))}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-border" />
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-[5px] border-4 border-transparent border-t-popover" />
+        </div>,
+        document.body
+      )}
+    </span>
+  );
+}
+
 // Card row component
 interface CardRowProps {
   card: ScryfallCard;
@@ -120,9 +206,11 @@ interface CardRowProps {
   dimmed?: boolean;
   avgCardPrice?: number | null;
   currency?: 'USD' | 'EUR';
+  combosForCard?: DetectedCombo[];
+  cardTypeMap?: Map<string, CardType>;
 }
 
-function CardRow({ card, quantity, onPreview, onHover, dimmed, avgCardPrice, currency = 'USD' }: CardRowProps) {
+function CardRow({ card, quantity, onPreview, onHover, dimmed, avgCardPrice, currency = 'USD', combosForCard, cardTypeMap }: CardRowProps) {
   const rawPrice = getCardPrice(card, currency);
   const price = formatPrice(rawPrice, currency === 'EUR' ? '€' : '$');
   const isDfc = isDoubleFacedCard(card);
@@ -149,6 +237,13 @@ function CardRow({ card, quantity, onPreview, onHover, dimmed, avgCardPrice, cur
         )}
         {card.isGameChanger && (
           <span className="ml-1 text-[10px] font-bold text-amber-500/70" title="Game Changer (EDHREC)">GC</span>
+        )}
+        {combosForCard && combosForCard.length > 0 && (
+          <ComboPopover
+            combos={combosForCard}
+            cardName={card.name.includes(' // ') ? card.name.split(' // ')[0] : card.name}
+            cardTypeMap={cardTypeMap}
+          />
         )}
         {isDfc && (
           <span
@@ -181,9 +276,11 @@ interface CategoryColumnProps {
   matchingCardIds: Set<string> | null;
   avgCardPrice?: number | null;
   currency?: 'USD' | 'EUR';
+  cardComboMap?: Map<string, DetectedCombo[]>;
+  cardTypeMap?: Map<string, CardType>;
 }
 
-function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds, avgCardPrice, currency = 'USD' }: CategoryColumnProps) {
+function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds, avgCardPrice, currency = 'USD', cardComboMap, cardTypeMap }: CategoryColumnProps) {
   const [animateRef] = useAutoAnimate({ duration: 200 });
 
   if (cards.length === 0) return null;
@@ -214,18 +311,23 @@ function CategoryColumn({ type, cards, onPreview, onHover, matchingCardIds, avgC
 
       {/* Cards */}
       <div ref={animateRef} className="py-1">
-        {cards.map(({ card, quantity }) => (
-          <CardRow
-            key={card.id}
-            card={card}
-            quantity={quantity}
-            onPreview={onPreview}
-            onHover={onHover}
-            dimmed={matchingCardIds !== null && !matchingCardIds.has(card.id)}
-            avgCardPrice={avgCardPrice}
-            currency={currency}
-          />
-        ))}
+        {cards.map(({ card, quantity }) => {
+          const normalizedName = card.name.includes(' // ') ? card.name.split(' // ')[0] : card.name;
+          return (
+            <CardRow
+              key={card.id}
+              card={card}
+              quantity={quantity}
+              onPreview={onPreview}
+              onHover={onHover}
+              dimmed={matchingCardIds !== null && !matchingCardIds.has(card.id)}
+              avgCardPrice={avgCardPrice}
+              currency={currency}
+              combosForCard={cardComboMap?.get(normalizedName)}
+              cardTypeMap={cardTypeMap}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -825,6 +927,38 @@ export function DeckDisplay() {
     return result;
   }, [generatedDeck, commander, sortBy, formatConfig.hasCommander]);
 
+  // Build map of card name -> complete combos that include it
+  const cardComboMap = useMemo(() => {
+    const map = new Map<string, DetectedCombo[]>();
+    const combos = generatedDeck?.detectedCombos;
+    if (!combos) return map;
+
+    for (const combo of combos) {
+      if (!combo.isComplete) continue;
+      for (const cardName of combo.cards) {
+        const existing = map.get(cardName);
+        if (existing) {
+          existing.push(combo);
+        } else {
+          map.set(cardName, [combo]);
+        }
+      }
+    }
+    return map;
+  }, [generatedDeck?.detectedCombos]);
+
+  // Build map of card name -> card type for combo popover icons
+  const cardTypeMap = useMemo(() => {
+    const map = new Map<string, CardType>();
+    for (const type of TYPE_ORDER) {
+      for (const { card } of groupedCards[type] || []) {
+        const normalizedName = card.name.includes(' // ') ? card.name.split(' // ')[0] : card.name;
+        map.set(normalizedName, type);
+      }
+    }
+    return map;
+  }, [groupedCards]);
+
   // Build set of card IDs matching the active stats filter
   const matchingCardIds = useMemo(() => {
     if (!statsFilter) return null;
@@ -1076,6 +1210,8 @@ export function DeckDisplay() {
                     matchingCardIds={combinedMatchingIds}
                     avgCardPrice={avgCardPrice}
                     currency={customization.currency}
+                    cardComboMap={cardComboMap}
+                    cardTypeMap={cardTypeMap}
                   />
                 ))}
               </div>
@@ -1131,6 +1267,19 @@ export function DeckDisplay() {
                                   </svg>
                                 </span>
                               )}
+                              {(() => {
+                                const normalizedName = card.name.includes(' // ') ? card.name.split(' // ')[0] : card.name;
+                                const combos = cardComboMap.get(normalizedName);
+                                if (!combos || combos.length === 0) return null;
+                                return (
+                                  <span
+                                    className="absolute bottom-1 left-1 bg-violet-600/80 text-white rounded-full w-5 h-5 flex items-center justify-center text-[9px] font-bold"
+                                    title={`Part of ${combos.length} combo${combos.length > 1 ? 's' : ''}`}
+                                  >
+                                    {combos.length > 1 ? combos.length : <Sparkles className="w-2.5 h-2.5" />}
+                                  </span>
+                                );
+                              })()}
                             </button>
                           );
                         })}
@@ -1155,7 +1304,13 @@ export function DeckDisplay() {
       )}
 
       {/* Modals */}
-      <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
+      <CardPreviewModal
+        card={previewCard}
+        onClose={() => setPreviewCard(null)}
+        combos={previewCard ? cardComboMap.get(previewCard.name.includes(' // ') ? previewCard.name.split(' // ')[0] : previewCard.name) : undefined}
+        cardTypeMap={cardTypeMap}
+        cardComboMap={cardComboMap}
+      />
       <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
